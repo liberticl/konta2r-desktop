@@ -34,16 +34,44 @@ def _sysfs_name(i: int) -> str:
         return ""
 
 
+def _device_key(i: int, name: str) -> str | None:
+    """Agrupa nodos del mismo físico (video + metadata comparten device)."""
+    if "metadata" in (name or "").lower():
+        return f"meta:{i}"
+    try:
+        dev = os.path.realpath(f"/sys/class/video4linux/video{i}/device")
+        if dev and "video4linux" not in dev:
+            return f"{dev}|{name}"
+    except OSError:
+        pass
+    return None
+
+
 def list_cameras(max_index: int = 10) -> list[tuple[int, str]]:
-    """Solo disponibles: [(index, nombre)]. Prueba apertura real."""
+    """Solo disponibles, UNA entrada por cámara física.
+
+    Cada cámara suele exponer 2 nodos /dev/video (captura + metadata)
+    con el mismo nombre; se conserva solo el primero de cada grupo.
+    """
     sys_names = _friendly_names()
-    found: list[tuple[int, str]] = []
+    candidates: list[tuple[int, str]] = []
     for i in range(max_index):
         cap = cv2.VideoCapture(i)
         ok = cap.isOpened()
         cap.release()
         if ok:
             nm = sys_names.get(i) or _sysfs_name(i) or f"Cámara {i}"
+            candidates.append((i, nm))
+    # dedup por dispositivo físico (solo cuando hay sysfs; sin eso se
+    # conservan todas para no ocultar una cámara real)
+    seen: set[str] = set()
+    found: list[tuple[int, str]] = []
+    for i, nm in candidates:
+        key = _device_key(i, nm)
+        if key is None:
+            found.append((i, nm))
+        elif key not in seen:
+            seen.add(key)
             found.append((i, nm))
     return found
 
