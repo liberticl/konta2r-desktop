@@ -23,6 +23,7 @@ from konta2r import tracker as tracker_mod
 from konta2r import store as store_mod
 from konta2r import sync_client as sync_mod
 from konta2r import export_csv as csv_mod
+from konta2r import geocode as geocode_mod
 from konta2r.capture import Camera, enumerate_cameras
 
 KEYS = ("person", "bicycle", "skater", "car", "motorcycle", "bus", "truck", "pet")
@@ -59,6 +60,10 @@ class App:
         self.model_size = int(self.cfg.get("model_size", 320))
         self.running, self.line_mode = False, False
         self.line_pts: list = []       # clicks display (x,y)
+        self.mouse_pos = None          # rubber-band preview (web parity)
+        self.avail_cams: list = []
+        self.cam_var = None
+        self.cam_menu = None
         self.frame, self.disp_boxes = None, []
         self.recording, self.writer = False, None
         self._build_ui()
@@ -78,8 +83,25 @@ class App:
                                     bg="black", highlightthickness=0)
         self.canvas.pack(side="left", fill="both", expand=True)
         self.canvas.bind("<Button-1>", self._on_canvas_click)
+        self.canvas.bind("<Motion>", self._on_canvas_move)
         side = ctk.CTkFrame(body, width=300)
         side.pack(side="right", fill="y", padx=6)
+        # selector de cámara (1)
+        ctk.CTkLabel(side, text="Cámara").pack(anchor="w")
+        self.cam_var = ctk.StringVar(value=str(self.cfg.get("camera_index", 0)))
+        try:
+            self.avail_cams = enumerate_cameras()
+        except Exception:  # noqa: BLE001
+            self.avail_cams = []
+        if int(self.cfg.get("camera_index", 0)) not in self.avail_cams:
+            self.avail_cams = sorted(set(self.avail_cams + [int(self.cfg.get("camera_index", 0))]))
+        self.cam_menu = ctk.CTkOptionMenu(
+            side, variable=self.cam_var,
+            values=[str(i) for i in self.avail_cams] or ["0"],
+            command=self._switch_camera)
+        self.cam_menu.pack(fill="x", pady=(0, 4))
+        ctk.CTkButton(side, text="↻ Recargar cámaras",
+                      command=self._refresh_cameras).pack(fill="x", pady=(0, 6))
         self.count_labels = {}
         for k in KEYS:
             row = ctk.CTkFrame(side)
@@ -224,6 +246,21 @@ class App:
                                     text=f"{b['label']} {int(b['score']*100)}%",
                                     fill=b["color"])
         line = self._active_line(disp_w, disp_h)
+        # (2) línea estilo web: roja punteada + etiquetas A/B + modo tinta + preview
+        if self.line_mode:
+            # tinta roja como en contador.html (rgba 255,0,0,0.18)
+            self.canvas.create_rectangle(0, 0, disp_w, disp_h,
+                                         fill="#ff0000", stipple="gray25", width=0)
+            if len(self.line_pts) == 0:
+                txt = "Modo línea - clic para inicio"
+            else:
+                txt = "Defina el segundo punto"
+            self.canvas.create_text(disp_w / 2, 30, text=txt, fill="white",
+                                    font=("Arial", 16))
+        if len(self.line_pts) == 1 and self.line_mode and self.mouse_pos:
+            (x1, y1) = self.line_pts[0]
+            self.canvas.create_line(x1, y1, self.mouse_pos[0], self.mouse_pos[1],
+                                    fill="red", width=3, dash=(8, 6))
         if line:
             self.canvas.create_line(line["start"]["x"], line["start"]["y"],
                                     line["end"]["x"], line["end"]["y"],
@@ -251,6 +288,45 @@ class App:
             config_store.save(self.cfg)
             self.line_mode = False
             self.line_pts = []
+
+    def _on_canvas_move(self, ev):
+        self.mouse_pos = (ev.x, ev.y)
+
+    def _refresh_cameras(self):
+        try:
+            self.avail_cams = enumerate_cameras()
+        except Exception as exc:  # noqa: BLE001
+            self._status(f"error enumerando cámaras: {exc}")
+            return
+        if not self.avail_cams:
+            self._status("sin cámaras detectadas")
+            return
+        self.cam_menu.configure(values=[str(i) for i in self.avail_cams])
+        self._status(f"cámaras: {self.avail_cams}")
+
+    def _switch_camera(self, choice):
+        try:
+            idx = int(choice)
+        except ValueError:
+            return
+        was_running = self.running
+        self.running = False
+        try:
+            self.cam.close()
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(0.15)
+        self.cam = Camera(idx, self.cfg.get("width", 1280), self.cfg.get("height", 720))
+        self.cfg["camera_index"] = idx
+        config_store.save(self.cfg)
+        self.tracker.reset()
+        if was_running:
+            self.start()
+        else:
+            # si el modelo ya cargó, arranca; si no, start() lo hará al cargar
+            if self.sess is not None:
+                self.start()
+        self._status(f"cámara {idx}")
 
     def toggle_line(self):
         if self.cfg.get("line"):
@@ -299,36 +375,91 @@ class App:
     def open_config(self):
         win = ctk.CTkToplevel(self.root)
         win.title("Configuracion")
-        win.geometry("420x560")
-        # sliders
+        win.geometry("440x600")
+        # (3) scroll para que todo quepa
+        scroll = ctk.CTkScrollableFrame(win)
+        scroll.pack(fill="both", expand=True, padx=8, pady=8)
+
         def row_slider(label, key, lo, hi, fmt="{}"):
-            ctk.CTkLabel(win, text=label).pack()
+            ctk.CTkLabel(scroll, text=label).pack()
             var = ctk.DoubleVar(value=float(self.cfg.get(key, lo)))
-            lbl = ctk.CTkLabel(win, text=fmt.format(var.get()))
+            lbl = ctk.CTkLabel(scroll, text=fmt.format(var.get()))
             lbl.pack()
+
             def _cb(v):
                 self.cfg[key] = round(float(v), 2) if isinstance(self.cfg.get(key), float) else int(float(v))
                 lbl.configure(text=fmt.format(self.cfg[key]))
-            ctk.CTkSlider(win, from_=lo, to=hi, variable=var,
+            ctk.CTkSlider(scroll, from_=lo, to=hi, variable=var,
                           command=_cb).pack(fill="x", padx=12)
-        row_slider("Camara index", "camera_index", 0, 8)
+        # (1) selector de cámara en config (sincronizado con el lateral)
+        ctk.CTkLabel(scroll, text="Cámara").pack()
+        cam_var_cfg = ctk.StringVar(value=str(self.cfg.get("camera_index", 0)))
+        try:
+            cams_cfg = enumerate_cameras()
+        except Exception:  # noqa: BLE001
+            cams_cfg = []
+        if not cams_cfg:
+            cams_cfg = [int(self.cfg.get("camera_index", 0))]
+
+        def _cfg_cam(choice):
+            self._switch_camera(choice)
+            try:
+                self.cam_var.set(choice)
+            except Exception:  # noqa: BLE001
+                pass
+        ctk.CTkOptionMenu(scroll, variable=cam_var_cfg,
+                          values=[str(i) for i in cams_cfg],
+                          command=_cfg_cam).pack(fill="x", padx=12)
         row_slider("Confianza", "conf_threshold", 0.1, 0.9)
         row_slider("Sync minutos", "sync_interval_min", 1, 60)
         row_slider("Modelo (320/640)", "model_size", 320, 640)
-        ctk.CTkLabel(win, text="Clases activas").pack(pady=(8, 0))
+        ctk.CTkLabel(scroll, text="Clases activas").pack(pady=(8, 0))
         self._cls_vars = {}
         for k in KEYS:
             v = ctk.BooleanVar(value=bool(self.cfg["clases_activas"].get(k, True)))
             self._cls_vars[k] = v
-            ctk.CTkCheckBox(win, text=LABELS[k], variable=v).pack(anchor="w", padx=20)
-        ctk.CTkLabel(win, text="Nombre dispositivo").pack()
-        e_name = ctk.CTkEntry(win)
+            ctk.CTkCheckBox(scroll, text=LABELS[k], variable=v).pack(anchor="w", padx=20)
+        ctk.CTkLabel(scroll, text="Nombre dispositivo").pack()
+        e_name = ctk.CTkEntry(scroll)
         e_name.insert(0, self.cfg.get("device_name", ""))
         e_name.pack(fill="x", padx=12)
-        ctk.CTkLabel(win, text="Coords lat,lon").pack()
-        e_coords = ctk.CTkEntry(win)
+        # (3) dirección -> coords vía Nominatim gratuita
+        ctk.CTkLabel(scroll, text="Dirección (para obtener coords)").pack()
+        e_addr = ctk.CTkEntry(scroll, placeholder_text="Ej: Av. Apoquindo 3400, Las Condes")
+        e_addr.pack(fill="x", padx=12)
+        lbl_geo = ctk.CTkLabel(scroll, text="", wraplength=380, justify="left")
+        lbl_geo.pack(padx=12)
+
+        def _buscar():
+            lbl_geo.configure(text="buscando...")
+            addr = e_addr.get().strip()
+            if not addr:
+                lbl_geo.configure(text="escribe una dirección")
+                return
+
+            def _t():
+                try:
+                    lat, lon, name = geocode_mod.forward(addr)
+                    self.cfg["coords"] = f"{lat},{lon}"
+                    config_store.save(self.cfg)
+                    try:
+                        e_coords.delete(0, "end")
+                        e_coords.insert(0, self.cfg["coords"])
+                    except Exception:  # noqa: BLE001
+                        pass
+                    lbl_geo.configure(text=f"{lat},{lon}\n{name[:160]}")
+                    self._status(f"coords: {lat},{lon}")
+                except Exception as exc:  # noqa: BLE001
+                    lbl_geo.configure(text=f"error: {exc}")
+            threading.Thread(target=_t, daemon=True).start()
+        ctk.CTkButton(scroll, text="Buscar dirección → coords",
+                      command=_buscar).pack(fill="x", padx=12, pady=4)
+        ctk.CTkLabel(scroll, text="Coords lat,lon").pack()
+        e_coords = ctk.CTkEntry(scroll)
         e_coords.insert(0, self.cfg.get("coords", ""))
         e_coords.pack(fill="x", padx=12)
+        ctk.CTkLabel(scroll, text="Fuente: Nominatim OSM (1 req/seg, gratis)",
+                     text_color="gray").pack()
 
         def _save():
             for k, v in self._cls_vars.items():
