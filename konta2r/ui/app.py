@@ -889,6 +889,10 @@ class App:
 
 def main(argv=None):
     require_gui()
+    try:
+        dbg_mod.log("konta2r-desktop inicio (sync: 1 POST por evento, datetime=creación real)")
+    except Exception:
+        pass
     app = App()
     # ensure fingerprint + register en background (no bloquea UI)
     cfg = app.cfg
