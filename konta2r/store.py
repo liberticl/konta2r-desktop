@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS events(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT, timestamp_iso TEXT, date TEXT, time TEXT,
   detected TEXT, detected_key TEXT, model_class TEXT, direction TEXT,
+  side_a TEXT DEFAULT '', side_b TEXT DEFAULT '',
   lat TEXT, lon TEXT, acc TEXT, synced INTEGER DEFAULT 0
 );
 """
@@ -32,16 +33,23 @@ class Store:
     def _init(self):
         with self._conn() as c:
             c.executescript(SCHEMA)
+            # migración liviana por si la tabla ya existía sin sides
+            cols = {r[1] for r in c.execute("PRAGMA table_info(events)")}
+            if "side_a" not in cols:
+                c.execute("ALTER TABLE events ADD COLUMN side_a TEXT DEFAULT ''")
+            if "side_b" not in cols:
+                c.execute("ALTER TABLE events ADD COLUMN side_b TEXT DEFAULT ''")
 
     def save_event(self, session_id="", timestamp_iso="", date="", time="",
                    detected="", detected_key="", model_class="", direction="",
+                   side_a="", side_b="",
                    lat="", lon="", acc="") -> int:
         with self._conn() as c:
             cur = c.execute(
                 "INSERT INTO events(session_id,timestamp_iso,date,time,detected,"
-                "detected_key,model_class,direction,lat,lon,acc) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                "detected_key,model_class,direction,side_a,side_b,lat,lon,acc) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (session_id, timestamp_iso, date, time, detected, detected_key,
-                 model_class, direction, lat, lon, acc))
+                 model_class, direction, side_a, side_b, lat, lon, acc))
             return cur.lastrowid
 
     def all_events(self, limit: int = 100000):

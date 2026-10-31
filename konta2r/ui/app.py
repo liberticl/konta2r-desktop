@@ -286,6 +286,8 @@ class App:
                 date=now.strftime("%d-%m-%Y"), time=now.strftime("%H:%M:%S"),
                 detected=track.get("label", ""), detected_key=key,
                 model_class=track.get("modelClass", ""), direction=direction or "",
+                side_a=(self.cfg.get("side_a") or "")[:100],
+                side_b=(self.cfg.get("side_b") or "")[:100],
                 lat=lat, lon=lon, acc="")
         except Exception:  # noqa: BLE001
             pass
@@ -335,13 +337,30 @@ class App:
             self.canvas.create_line(x1, y1, self.mouse_pos[0], self.mouse_pos[1],
                                     fill="red", width=3, dash=(8, 6))
         if line:
-            self.canvas.create_line(line["start"]["x"], line["start"]["y"],
-                                    line["end"]["x"], line["end"]["y"],
-                                    fill="red", width=3, dash=(8, 6))
-            self.canvas.create_text(line["start"]["x"] + 6, line["start"]["y"] - 16,
-                                    text="A", fill="red")
-            self.canvas.create_text(line["end"]["x"] + 6, line["end"]["y"] - 16,
-                                    text="B", fill="red")
+            sx, sy = line["start"]["x"], line["start"]["y"]
+            ex, ey = line["end"]["x"], line["end"]["y"]
+            self.canvas.create_line(sx, sy, ex, ey, fill="red", width=3, dash=(8, 6))
+            # vértices rojos + etiquetas A/B por LADO (mitad -1=A, +1=B), como v2
+            for px, py in ((sx, sy), (ex, ey)):
+                self.canvas.create_oval(px - 5, py - 5, px + 5, py + 5, fill="red", width=0)
+            dx, dy = ex - sx, ey - sy
+            import math as _math
+            ln = _math.hypot(dx, dy)
+            if ln >= 1:
+                mx, my = (sx + ex) / 2, (sy + ey) / 2
+                nx, ny = -dy / ln, dx / ln  # normal hacia B (+1)
+                sides = {"a": (self.cfg.get("side_a") or "")[:20],
+                         "b": (self.cfg.get("side_b") or "")[:20]}
+                for s, tag in ((-1, "A"), (1, "B")):
+                    px, py = mx + nx * 46 * s, my + ny * 46 * s
+                    self.canvas.create_oval(px - 16, py - 16, px + 16, py + 16,
+                                            fill="black", width=0)
+                    self.canvas.create_text(px, py, text=tag, fill="white",
+                                            font=("Arial", 16, "bold"))
+                    nm = sides["a"] if s < 0 else sides["b"]
+                    if nm:
+                        self.canvas.create_text(px, py + 36, text=nm, fill="white",
+                                                font=("Arial", 11))
 
     def _overlay(self, frame):
         h, w = frame.shape[:2]
@@ -693,6 +712,14 @@ class App:
         e_coords.pack(fill="x", padx=12)
         ctk.CTkLabel(scroll, text="Fuente: Nominatim OSM (1 req/seg, gratis)",
                      text_color="gray").pack()
+        ctk.CTkLabel(scroll, text="Nombre lado A (referencia, máx 100)").pack()
+        e_side_a = ctk.CTkEntry(scroll, placeholder_text="Ej: Norte / Entrada")
+        e_side_a.insert(0, self.cfg.get("side_a", ""))
+        e_side_a.pack(fill="x", padx=12)
+        ctk.CTkLabel(scroll, text="Nombre lado B (referencia, máx 100)").pack()
+        e_side_b = ctk.CTkEntry(scroll, placeholder_text="Ej: Sur / Salida")
+        e_side_b.insert(0, self.cfg.get("side_b", ""))
+        e_side_b.pack(fill="x", padx=12)
 
         def _save():
             for k, v in self._cls_vars.items():
@@ -703,6 +730,8 @@ class App:
             self.cfg["model_size"] = new_size
             self.cfg["device_name"] = e_name.get().strip()[:200]
             self.cfg["coords"] = e_coords.get().strip()
+            self.cfg["side_a"] = e_side_a.get().strip()[:100]
+            self.cfg["side_b"] = e_side_b.get().strip()[:100]
             config_store.save(self.cfg)
             win.destroy()
             # PATCH nombre en API si cambió y hay token (como la web)

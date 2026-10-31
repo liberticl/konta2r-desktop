@@ -51,20 +51,46 @@ def build_direction_payload(events: list[dict]) -> dict:
 
 def totals_payload(totals: dict, when_iso: str | None = None,
                    line: dict | None = None,
-                   direction_counts: dict | None = None) -> dict:
+                   direction_counts: dict | None = None,
+                   side_names: dict | None = None) -> dict:
+    """Arma payload según docs/api.md.
+
+    - Sin dirección: solo totales (>0) + datetime (line=None).
+    - Con dirección: line obligatoria + direction_counts consistentes;
+      por categoría total == A→B + B→A (si no cuadra, se omite esa
+      categoría del desglose para no provocar 400, como la web).
+    - side_names opcional {a,b} máx 100.
+    """
     when_iso = when_iso or datetime.datetime.now(
         datetime.timezone.utc).isoformat()
     payload: dict = {"datetime": when_iso}
     payload.update(_api_counts(totals))
-    # CON dirección: line + direction_counts (aunque vayan vacíos parciales)
     if line is not None:
+        ok_line = all(isinstance(line.get(k), (int, float)) and 0 <= line[k] <= 1
+                      for k in ("x1", "y1", "x2", "y2"))
+        if not ok_line:
+            return payload
         payload["line"] = {"x1": float(line["x1"]), "y1": float(line["y1"]),
                            "x2": float(line["x2"]), "y2": float(line["y2"])}
         dc = direction_counts or {"a_to_b": {}, "b_to_a": {}}
-        payload["direction_counts"] = {
-            "a_to_b": dict(dc.get("a_to_b", {})),
-            "b_to_a": dict(dc.get("b_to_a", {})),
-        }
+        clean = {"a_to_b": {}, "b_to_a": {}}
+        for api_field, total_v in list(payload.items()):
+            if not api_field.endswith("_count") or api_field == "datetime":
+                continue
+            a = int((dc.get("a_to_b") or {}).get(api_field, 0) or 0)
+            b = int((dc.get("b_to_a") or {}).get(api_field, 0) or 0)
+            if a + b > 0 and a + b == int(total_v):
+                if a > 0:
+                    clean["a_to_b"][api_field] = a
+                if b > 0:
+                    clean["b_to_a"][api_field] = b
+            # si d>0 pero != total: se omite (línea redibujada/pendientes viejos)
+        if clean["a_to_b"] or clean["b_to_a"]:
+            payload["direction_counts"] = clean
+        a = (side_names or {}).get("a", "")[:100]
+        b = (side_names or {}).get("b", "")[:100]
+        if a or b:
+            payload["side_names"] = {"a": a, "b": b}
     return payload
 
 
@@ -127,10 +153,11 @@ class SyncClient:
         line = (self.cfg or {}).get("line")
         if line:
             direction_counts = build_direction_payload(events)
-            # Consistencia: totales = suma direccional (si hay mezcla sin
-            # dirección por conteo por aparición, igual se envían totales).
+            sides = {"a": (self.cfg or {}).get("side_a", ""),
+                     "b": (self.cfg or {}).get("side_b", "")}
             payload = totals_payload(totals, line=line,
-                                     direction_counts=direction_counts)
+                                     direction_counts=direction_counts,
+                                     side_names=sides)
         else:
             # SIN dirección: backward-compatible, sin keys line/direction_counts
             payload = totals_payload(totals)
