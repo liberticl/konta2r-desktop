@@ -1,7 +1,9 @@
-"""Cliente sync offline-first: register, totales + dirección A/B, rename."""
+"""Cliente sync offline-first: register, 1 POST por evento, watcher de red."""
 from __future__ import annotations
 import datetime
+import socket
 import threading
+import urllib.parse
 import requests
 
 from konta2r import debug as dbg
@@ -103,6 +105,71 @@ class SyncClient:
         self.on_status = on_status or (lambda ok, msg: None)
         self.timeout = timeout
         self._timer = None
+        # watcher de red: una hebra durmiendo, 1 socket por chequeo
+        self._online = True  # se corrige en el primer flush/probe
+        self._watcher = None
+        self._watch_stop = None
+        self.on_change = None  # callback(bool online)
+
+    def _probe(self) -> bool:
+        """Chequeo barato: TCP connect al host de la API (sin TLS/HTTP)."""
+        try:
+            u = urllib.parse.urlparse(self.api)
+            host = u.hostname or "andeschileong.cl"
+            port = u.port or (443 if u.scheme == "https" else 80)
+            with socket.create_connection((host, port), timeout=4):
+                pass
+            return True
+        except OSError:
+            return False
+
+    def start_watcher(self, interval: float = 20.0, on_change=None):
+        """Detecta caída/reconexión con uso mínimo (1 hebra + 1 socket c/20s).
+
+        Al reconectar dispara flush() solo. No genera errores: si no hay
+        red, flush() se omite en silencio hasta volver.
+        """
+        self.stop_watcher()
+        if on_change is not None:
+            self.on_change = on_change
+        stop = threading.Event()
+        self._watch_stop = stop
+
+        def _loop():
+            while not stop.wait(interval):
+                try:
+                    ok = self._probe()
+                except Exception:  # noqa: BLE001
+                    ok = False
+                if ok != self._online:
+                    self._online = ok
+                    if ok:
+                        dbg.log("red: reconexión detectada → enviando pendientes")
+                        try:
+                            if self.on_change:
+                                self.on_change(True)
+                            self.flush()
+                        except Exception as exc:  # noqa: BLE001
+                            dbg.log(f"flush tras reconexión falló: {exc}")
+                    else:
+                        dbg.log("red: caída detectada → se pausa el envío (sin errores)")
+                        try:
+                            if self.on_change:
+                                self.on_change(False)
+                        except Exception:  # noqa: BLE001
+                            pass
+        t = threading.Thread(target=_loop, daemon=True, name="net-watcher")
+        self._watcher = t
+        t.start()
+
+    def stop_watcher(self):
+        if self._watch_stop is not None:
+            try:
+                self._watch_stop.set()
+            except Exception:  # noqa: BLE001
+                pass
+            self._watch_stop = None
+        self._watcher = None
 
     def _headers(self):
         tok = self.cfg.get("token", "")
@@ -176,6 +243,10 @@ class SyncClient:
         if not events:
             self.on_status(True, "al dia")
             return True
+        if self._online is False:
+            # sin red (lo sabe el watcher): no se intenta, no hay error
+            self.on_status(False, "sin conexión — envío pausado")
+            return False
         sent, failed = 0, 0
         for ev in events:
             payload = self._event_payload(ev)
@@ -206,14 +277,29 @@ class SyncClient:
                         break
                 r.raise_for_status()
             except requests.RequestException as exc:
-                dbg.log(f"API POST fallo: {exc.__class__.__name__}: {exc}")
+                if getattr(exc, "response", None) is None:
+                    # sin respuesta HTTP = sin red: lo marca el watcher, sin timer
+                    dbg.log(f"API sin red ({exc.__class__.__name__}): envío pausado")
+                    if self._online is not False:
+                        self._online = False
+                        try:
+                            if self.on_change:
+                                self.on_change(False)
+                        except Exception:  # noqa: BLE001
+                            pass
+                else:
+                    dbg.log(f"API POST fallo: {exc.__class__.__name__}: {exc}")
                 failed += 1
                 break
             self.store.mark_synced([ev["id"]])
             sent += 1
         if failed:
-            self.on_status(False, f"pendientes: {failed} (enviados {sent})")
-            self.schedule_retry()
+            if self._online is False:
+                self.on_status(False, "sin conexión — envío pausado")
+                # sin timer: el watcher reanuda solo al reconectar
+            else:
+                self.on_status(False, f"pendientes: {failed} (enviados {sent})")
+                self.schedule_retry()
             return False
         dbg.log(f"API sincronizados: {sent}")
         self.on_status(True, f"sincronizado ({sent})")

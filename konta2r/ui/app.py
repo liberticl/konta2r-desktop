@@ -76,6 +76,8 @@ class App:
         self._status_pending_cam = None
         self.cam_var = None
         self.cam_menu = None
+        self.disp_w, self.disp_h = 760, 520  # se ajusta al canvas real
+        self.lbl_net = None
         self.frame, self.disp_boxes = None, []
         self.recording, self.writer = False, None
         self._build_ui()
@@ -87,24 +89,23 @@ class App:
         self.root = ctk.CTk()
         self.root.title("konta2r-desktop")
         self.root.geometry("1100x700")
-        self.lbl_status = ctk.CTkLabel(self.root, text="iniciando...")
-        self.lbl_status.pack(pady=2)
-        top = ctk.CTkFrame(self.root)
-        top.pack(fill="x", padx=8)
-        self.lbl_measure = ctk.CTkLabel(top, text="● Sin medición", text_color="gray")
-        self.lbl_measure.pack(side="left", padx=4)
-        self.btn_measure = ctk.CTkButton(top, text="▶ Iniciar medición",
-                                          fg_color="green", command=self.toggle_measure)
-        self.btn_measure.pack(side="right", padx=4, pady=4)
+        self.root.minsize(820, 520)
         body = ctk.CTkFrame(self.root)
-        body.pack(fill="both", expand=True, padx=8, pady=4)
-        self.canvas = ctk.CTkCanvas(body, width=760, height=520,
-                                    bg="black", highlightthickness=0)
+        body.pack(fill="both", expand=True, padx=8, pady=8)
+        self.canvas = ctk.CTkCanvas(body, bg="black", highlightthickness=0)
         self.canvas.pack(side="left", fill="both", expand=True)
         self.canvas.bind("<Button-1>", self._on_canvas_click)
         self.canvas.bind("<Motion>", self._on_canvas_move)
-        side = ctk.CTkFrame(body, width=300)
-        side.pack(side="right", fill="y", padx=6)
+        self.canvas.bind("<Configure>", self._on_canvas_resize)
+        side = ctk.CTkScrollableFrame(body, width=280)
+        side.pack(side="right", fill="y", padx=(6, 0))
+        self.lbl_measure = ctk.CTkLabel(side, text="● Sin medición", text_color="gray")
+        self.lbl_measure.pack(anchor="w", pady=(0, 2))
+        self.btn_measure = ctk.CTkButton(side, text="▶ Iniciar medición",
+                                         fg_color="green", command=self.toggle_measure)
+        self.btn_measure.pack(fill="x", pady=(0, 4))
+        self.lbl_net = ctk.CTkLabel(side, text="● Red: …", text_color="gray")
+        self.lbl_net.pack(anchor="w", pady=(0, 6))
         # selector de cámara con nombre, solo disponibles
         ctk.CTkLabel(side, text="Cámara").pack(anchor="w")
         self.cam_options: dict[str, int] = {}
@@ -159,16 +160,15 @@ class App:
                     return
                 self.sess = infer_mod.Session(path)
                 self._status(f"modelo {self.model_size}px listo")
+                self._toast(f"Modelo {self.model_size}px listo")
                 self.start()
             except Exception as exc:  # noqa: BLE001
                 self._status(f"error modelo: {exc}")
+                self._toast(f"Error modelo: {exc}")
         threading.Thread(target=_t, daemon=True).start()
 
     def _status(self, msg):
-        try:
-            self.lbl_status.configure(text=msg)
-        except Exception:
-            pass
+        # Sin barra superior: todo va al debug.log + terminal en vivo.
         try:
             dbg_mod.log(msg)
         except Exception:
@@ -210,6 +210,7 @@ class App:
                 cams = []
             names = ", ".join(camera_label(i, n) for i, n in cams) or "ninguna"
             self._status(f"cámara {self.cam.index} no disponible ({names}). Recarga y elige otra.")
+            self._toast("Sin cámara: recarga y elige otra")
             self.running = False
             return
         if getattr(self, "_status_pending_cam", None) is not None:
@@ -238,7 +239,7 @@ class App:
                 continue
             dets = infer_mod.parse_output0(raw, conf, self.cfg.get("clases_activas"))
             h, w = frame.shape[:2]
-            disp_w, disp_h = 760, 520
+            disp_w, disp_h = self.disp_w, self.disp_h
             boxes, now = [], int(time.time() * 1000)
             for d in dets:
                 src = pre.model_box_to_src(d["bbox_model"], meta)
@@ -310,7 +311,7 @@ class App:
         self.canvas.delete("all")
         if self.frame is None:
             return
-        disp_w, disp_h = 760, 520
+        disp_w, disp_h = self.disp_w, self.disp_h
         small = cv2.resize(self.frame, (disp_w, disp_h))
         img = Image.fromarray(cv2.cvtColor(small, cv2.COLOR_BGR2RGB))
         self._tk = ImageTk.PhotoImage(img)
@@ -377,14 +378,34 @@ class App:
         self.line_pts.append((ev.x, ev.y))
         if len(self.line_pts) == 2:
             (x1, y1), (x2, y2) = self.line_pts
-            self.cfg["line"] = {"x1": x1 / 760, "y1": y1 / 520,
-                                "x2": x2 / 760, "y2": y2 / 520}
+            self.cfg["line"] = {"x1": x1 / self.disp_w, "y1": y1 / self.disp_h,
+                                "x2": x2 / self.disp_w, "y2": y2 / self.disp_h}
             config_store.save(self.cfg)
             self.line_mode = False
             self.line_pts = []
 
     def _on_canvas_move(self, ev):
         self.mouse_pos = (ev.x, ev.y)
+
+    def _on_canvas_resize(self, ev):
+        if ev.width > 200 and ev.height > 150:
+            self.disp_w, self.disp_h = int(ev.width), int(ev.height)
+
+    def _on_net_change(self, online: bool):
+        # viene de la hebra watcher: todo UI vía after (hilo principal)
+        def _apply():
+            try:
+                if online:
+                    self.lbl_net.configure(text="● Red: online", text_color="green")
+                else:
+                    self.lbl_net.configure(text="● Red: offline", text_color="red")
+            except Exception:
+                pass
+            self._toast("Red: reconectada, enviando" if online else "Red: sin conexión")
+        try:
+            self.root.after(0, _apply)
+        except Exception:
+            pass
 
     def _refresh_cameras(self):
         try:
@@ -837,9 +858,9 @@ class App:
                         self._status(f"rename fallo: {exc}")
                 threading.Thread(target=_rn, daemon=True).start()
             if self._reload_model(new_size):
-                self._status(f"config guardada, recargando modelo {new_size}px…")
+                self._toast(f"Config guardada, recargando modelo {new_size}px")
             else:
-                self._status("config guardada")
+                self._toast("Config guardada")
         ctk.CTkButton(win, text="Guardar", command=_save).pack(pady=10)
 
     def _reload_model(self, size: int):
@@ -869,6 +890,12 @@ class App:
 
     def close(self):
         self.running = False
+        try:
+            if self.sync_client is not None:
+                self.sync_client.stop_watcher()
+                self.sync_client.cancel_retry()
+        except Exception:  # noqa: BLE001
+            pass
         try:
             if self.recording and self.writer is not None:
                 self.writer.release()
@@ -906,6 +933,22 @@ def main(argv=None):
             client = sync_mod.SyncClient(cfg.get("api_base", "https://andeschileong.cl"),
                                          app.db, cfg, on_status=lambda ok, m: None)
             app.sync_client = client
+            try:
+                client.start_watcher(interval=20.0,
+                                     on_change=app._on_net_change)
+                # estado inicial sin toast: solo el indicador
+                _ok = client._probe()
+                client._online = _ok
+                def _init_lbl(ok=_ok):
+                    try:
+                        app.lbl_net.configure(
+                            text="● Red: online" if ok else "● Red: offline",
+                            text_color="green" if ok else "red")
+                    except Exception:
+                        pass
+                app.root.after(0, _init_lbl)
+            except Exception:  # noqa: BLE001
+                pass
             if not cfg.get("token"):
                 client.register(cfg["fingerprint"], fp_mod.user_agent(),
                                 cfg.get("coords", ""))
