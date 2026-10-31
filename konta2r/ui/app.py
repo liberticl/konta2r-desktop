@@ -64,6 +64,7 @@ class App:
         self.measuring = False
         self.sync_client = None
         self.debug_localhost = False  # solo sesión, no persistente, default off
+        self.debug_port = "8000"  # solo sesión; "" = sin puerto
         self.btn_measure = None
         self.lbl_measure = None
         self._term_win = None
@@ -449,9 +450,17 @@ class App:
         else:
             self._ask_finish()
 
+    def _debug_url(self) -> str:
+        port = (getattr(self, "debug_port", "") or "").strip()
+        if port:
+            if not port.isdigit() or not (1 <= int(port) <= 65535):
+                return "http://localhost:8000"
+            return f"http://localhost:{int(port)}"
+        return "http://localhost"
+
     def _effective_api(self) -> str:
         if getattr(self, "debug_localhost", False):
-            return "http://localhost:8000"
+            return self._debug_url()
         return (self.cfg.get("api_base") or "https://andeschileong.cl").rstrip("/")
 
     def _ensure_sync_client(self):
@@ -731,13 +740,17 @@ class App:
         e_side_b.pack(fill="x", padx=12)
         # Debug: host a localhost, solo sesión, default off, con código 4 dígitos
         ctk.CTkLabel(scroll, text="Debug API").pack(pady=(10, 0))
+        ctk.CTkLabel(scroll, text="Puerto localhost (vacío = sin puerto)").pack()
+        e_dbg_port = ctk.CTkEntry(scroll, placeholder_text="8000")
+        e_dbg_port.insert(0, getattr(self, "debug_port", "8000"))
+        e_dbg_port.pack(fill="x", padx=12)
         lbl_dbg = ctk.CTkLabel(scroll, text="", wraplength=380, justify="left",
                                text_color="gray")
         lbl_dbg.pack(padx=12)
 
         def _refresh_dbg():
             if self.debug_localhost:
-                lbl_dbg.configure(text="ON → http://localhost:8000 (solo esta sesión)")
+                lbl_dbg.configure(text=f"ON → {self._debug_url()} (solo esta sesión)")
                 btn_dbg.configure(text="Desactivar debug", fg_color="orange")
             else:
                 lbl_dbg.configure(text=f"OFF → {(self.cfg.get('api_base') or 'https://andeschileong.cl')}")
@@ -767,11 +780,12 @@ class App:
             entry.focus_set()
             def _ok(_ev=None):
                 if entry.get().strip() == code:
+                    self.debug_port = e_dbg_port.get().strip()
                     win2.destroy()
                     self.debug_localhost = True
                     self._ensure_sync_client()
-                    self._status("debug ON: API http://localhost:8000 (no persistente)")
-                    self._toast("Debug ON\nhttp://localhost:8000")
+                    self._status(f"debug ON: API {self._debug_url()} (no persistente)")
+                    self._toast(f"Debug ON\n{self._debug_url()}")
                     _refresh_dbg()
                 else:
                     err.configure(text="Código incorrecto")
@@ -780,6 +794,23 @@ class App:
             entry.bind("<Return>", _ok)
         btn_dbg = ctk.CTkButton(scroll, text="", command=_toggle_dbg)
         btn_dbg.pack(fill="x", padx=12, pady=4)
+        btn_apply_port = ctk.CTkButton(scroll, text="Aplicar puerto",
+                                       command=lambda: (
+                                           setattr(self, "debug_port",
+                                                   e_dbg_port.get().strip()),
+                                           self._ensure_sync_client(),
+                                           self._status(f"debug ON: API {self._debug_url()}"),
+                                           _refresh_dbg()))
+        _orig_refresh = _refresh_dbg
+        def _refresh_dbg():
+            _orig_refresh()
+            try:
+                if self.debug_localhost:
+                    btn_apply_port.pack(fill="x", padx=12, pady=(0, 4))
+                else:
+                    btn_apply_port.pack_forget()
+            except Exception:  # noqa: BLE001
+                pass
         _refresh_dbg()
 
         def _save():
