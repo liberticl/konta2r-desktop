@@ -654,13 +654,42 @@ class App:
             for k, v in self._cls_vars.items():
                 self.cfg["clases_activas"][k] = bool(v.get())
             ms = int(self.cfg.get("model_size", 320))
-            self.cfg["model_size"] = 640 if ms >= 480 else 320
+            new_size = 640 if ms >= 480 else 320
+            self.cfg["model_size"] = new_size
             self.cfg["device_name"] = e_name.get().strip()[:200]
             self.cfg["coords"] = e_coords.get().strip()
             config_store.save(self.cfg)
             win.destroy()
-            self._status("config guardada (modelo aplica al reiniciar)")
+            if self._reload_model(new_size):
+                self._status(f"config guardada, recargando modelo {new_size}px…")
+            else:
+                self._status("config guardada")
         ctk.CTkButton(win, text="Guardar", command=_save).pack(pady=10)
+
+    def _reload_model(self, size: int):
+        """Recarga .onnx en background sin reiniciar la app."""
+        size = 640 if int(size) >= 480 else 320
+        if self.sess is not None and int(self.model_size) == size:
+            return False
+        self.model_size = size
+        self.sess = None
+        self._status(f"cargando modelo {size}px…")
+
+        def _t():
+            try:
+                path = infer_mod.default_model_path(size)
+                if not os.path.exists(path):
+                    self._status(f"modelo no encontrado: {path}")
+                    return
+                sess = infer_mod.Session(path)
+                self.sess = sess
+                self._status(f"modelo {size}px listo")
+                if not self.running:
+                    self.start()
+            except Exception as exc:  # noqa: BLE001
+                self._status(f"error modelo: {exc}")
+        threading.Thread(target=_t, daemon=True).start()
+        return True
 
     def close(self):
         self.running = False
