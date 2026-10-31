@@ -63,6 +63,7 @@ class App:
         self.running, self.line_mode = False, False
         self.measuring = False
         self.sync_client = None
+        self._session_line = None  # línea no persistente (solo memoria)
         self.debug_localhost = False  # solo sesión, no persistente, default off
         self.debug_port = "8000"  # solo sesión; "" = sin puerto
         self.btn_measure = None
@@ -262,8 +263,30 @@ class App:
                 except Exception:  # noqa: BLE001
                     pass
 
+    def _line_norm(self):
+        """Línea efectiva: persistente (config) o solo sesión (memoria)."""
+        if self.cfg.get("line_persistent", True):
+            return self.cfg.get("line")
+        return self._session_line
+
+    def _set_line(self, line):
+        if self.cfg.get("line_persistent", True):
+            self.cfg["line"] = line
+            config_store.save(self.cfg)
+            self._session_line = None
+        else:
+            self._session_line = line
+        self._push_line_to_client()
+
+    def _push_line_to_client(self):
+        try:
+            if self.sync_client is not None:
+                self.sync_client.session_line = self._session_line
+        except Exception:  # noqa: BLE001
+            pass
+
     def _active_line(self, dw, dh):
-        ln = self.cfg.get("line")
+        ln = self._line_norm()
         if ln:
             return {"start": {"x": ln["x1"] * dw, "y": ln["y1"] * dh},
                     "end": {"x": ln["x2"] * dw, "y": ln["y2"] * dh}}
@@ -378,11 +401,11 @@ class App:
         self.line_pts.append((ev.x, ev.y))
         if len(self.line_pts) == 2:
             (x1, y1), (x2, y2) = self.line_pts
-            self.cfg["line"] = {"x1": x1 / self.disp_w, "y1": y1 / self.disp_h,
-                                "x2": x2 / self.disp_w, "y2": y2 / self.disp_h}
-            config_store.save(self.cfg)
+            self._set_line({"x1": x1 / self.disp_w, "y1": y1 / self.disp_h,
+                            "x2": x2 / self.disp_w, "y2": y2 / self.disp_h})
             self.line_mode = False
             self.line_pts = []
+            self._toast("Línea guardada" + (" (persistente)" if self.cfg.get("line_persistent", True) else " (solo esta sesión)"))
 
     def _on_canvas_move(self, ev):
         self.mouse_pos = (ev.x, ev.y)
@@ -454,11 +477,14 @@ class App:
         self._status(f"cámara {idx}")
 
     def toggle_line(self):
-        if self.cfg.get("line"):
+        if self._line_norm():
             self.cfg["line"] = None
-            config_store.save(self.cfg)
+            self._session_line = None
+            if self.cfg.get("line_persistent", True):
+                config_store.save(self.cfg)
+            self._push_line_to_client()
             self.line_pts = []
-            self._status("linea borrada; clic Linea para crear otra")
+            self._toast("Línea borrada")
         else:
             self.line_mode = not self.line_mode
             self.line_pts = []
@@ -492,6 +518,7 @@ class App:
                 on_status=lambda ok, m: self._status(m))
         else:
             self.sync_client.api = api
+        self.sync_client.session_line = self._session_line
         return self.sync_client
 
     def toggle_terminal(self):
@@ -759,6 +786,12 @@ class App:
         e_side_b = ctk.CTkEntry(scroll, placeholder_text="Ej: Sur / Salida")
         e_side_b.insert(0, self.cfg.get("side_b", ""))
         e_side_b.pack(fill="x", padx=12)
+        ctk.CTkLabel(scroll, text="Línea de conteo").pack(pady=(8, 0))
+        var_persist = ctk.BooleanVar(value=bool(self.cfg.get("line_persistent", True)))
+        ctk.CTkCheckBox(scroll, text="Línea persistente entre sesiones",
+                        variable=var_persist).pack(anchor="w", padx=20)
+        ctk.CTkLabel(scroll, text="Apagado = la línea vive solo esta sesión",
+                     text_color="gray").pack()
         # Debug: host a localhost, solo sesión, default off, con código 4 dígitos
         ctk.CTkLabel(scroll, text="Debug API").pack(pady=(10, 0))
         ctk.CTkLabel(scroll, text="Puerto localhost (vacío = sin puerto)").pack()
@@ -845,7 +878,21 @@ class App:
             self.cfg["coords"] = e_coords.get().strip()
             self.cfg["side_a"] = e_side_a.get().strip()[:100]
             self.cfg["side_b"] = e_side_b.get().strip()[:100]
+            new_persist = bool(var_persist.get())
+            old_persist = bool(self.cfg.get("line_persistent", True))
+            self.cfg["line_persistent"] = new_persist
+            if new_persist and not old_persist:
+                # sesión -> archivo: la línea actual queda persistente
+                if self._session_line and not self.cfg.get("line"):
+                    self.cfg["line"] = self._session_line
+                self._session_line = None
+            elif not new_persist and old_persist:
+                # archivo -> sesión: la línea actual vive solo hasta cerrar
+                if self.cfg.get("line"):
+                    self._session_line = self.cfg.get("line")
+                    self.cfg["line"] = None
             config_store.save(self.cfg)
+            self._push_line_to_client()
             win.destroy()
             # PATCH nombre en API si cambió y hay token (como la web)
             if self.cfg["device_name"] != old_name and self.cfg.get("token"):

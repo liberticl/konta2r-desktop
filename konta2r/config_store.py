@@ -21,6 +21,7 @@ DEFAULTS = {
     "sync_interval_min": 5,
     "clases_activas": dict(CLASES_DEFAULT),
     "line": None,               # {"x1":..,"y1":..,"x2":..,"y2":..} norm o None
+    "line_persistent": True,    # False = la línea vive solo esta sesión
     "side_a": "",               # nombre lado A (máx 100, ref)
     "side_b": "",               # nombre lado B (máx 100, ref)
     "device_name": "",

@@ -105,6 +105,7 @@ class SyncClient:
         self.on_status = on_status or (lambda ok, msg: None)
         self.timeout = timeout
         self._timer = None
+        self.session_line = None  # línea no persistente (la pone la UI)
         # watcher de red: una hebra durmiendo, 1 socket por chequeo
         self._online = True  # se corrige en el primer flush/probe
         self._watcher = None
@@ -212,7 +213,7 @@ class SyncClient:
         totals = {key: 1} if key else {}
         when = ev.get("timestamp_iso") or None
         direction = (ev.get("direction") or "").strip()
-        line = (self.cfg or {}).get("line")
+        line = (self.cfg or {}).get("line") or self.session_line
         if direction in ("A->B", "B->A") and line:
             api_field = KEY_TO_API.get(key)
             dc = {"a_to_b": {}, "b_to_a": {}}
