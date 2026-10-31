@@ -1,40 +1,69 @@
-"""Cliente sync offline-first: register, totales, rename, reintento."""
+"""Cliente sync offline-first: register, totales + dirección A/B, rename."""
 from __future__ import annotations
 import datetime
 import threading
 import requests
 
+# interno tracker/store -> campo API
+KEY_TO_API = {
+    "car": "car_count",
+    "person": "person_count",
+    "bicycle": "bicycle_count",
+    "motorcycle": "motorcycle_count",
+    "truck": "truck_count",
+    "bus": "bus_count",
+    "skater": "skater_count",
+    "pet": "pet_count",
+}
+API_TO_KEY = {v: k for k, v in KEY_TO_API.items()}
+
+
+def _api_counts(internal: dict) -> dict:
+    """Convierte {car,person,...} -> {car_count,...} solo con valores >0."""
+    out = {}
+    for k, v in (internal or {}).items():
+        if k in KEY_TO_API and int(v or 0) > 0:
+            out[KEY_TO_API[k]] = int(v)
+    return out
+
 
 def build_direction_payload(events: list[dict]) -> dict:
-    """HOOK futuro: agrega conteo por direccion cuando la API lo soporte.
-
-    Por ahora POST /api/trafico/ solo acepta totales agregados
-    (car_count, person_count, ...). Esta funcion queda lista para
-    extender el payload sin tocar el loop de conteo.
+    """Arma direction_counts según contrato nuevo:
+    {"a_to_b": {bicycle_count: 3}, "b_to_a": {bicycle_count: 1}}
+    Eventos usan direction "A->B"/"B->A" y detected_key interno.
     """
-    by_dir: dict[str, dict[str, int]] = {}
-    for e in events:
-        d = e.get("direction") or "sin_linea"
-        k = e.get("detected_key", "")
-        by_dir.setdefault(d, {}).setdefault(k, 0)
-        by_dir[d][k] += 1
-    return {"by_direction": by_dir}
+    a_to_b: dict[str, int] = {}
+    b_to_a: dict[str, int] = {}
+    for e in events or []:
+        d = (e.get("direction") or "").strip()
+        key = e.get("detected_key", "")
+        api_field = KEY_TO_API.get(key)
+        if not api_field:
+            continue
+        if d == "A->B":
+            a_to_b[api_field] = a_to_b.get(api_field, 0) + 1
+        elif d == "B->A":
+            b_to_a[api_field] = b_to_a.get(api_field, 0) + 1
+    return {"a_to_b": a_to_b, "b_to_a": b_to_a}
 
 
-def totals_payload(totals: dict, when_iso: str | None = None) -> dict:
+def totals_payload(totals: dict, when_iso: str | None = None,
+                   line: dict | None = None,
+                   direction_counts: dict | None = None) -> dict:
     when_iso = when_iso or datetime.datetime.now(
         datetime.timezone.utc).isoformat()
-    return {
-        "datetime": when_iso,
-        "car_count": totals.get("car", 0),
-        "person_count": totals.get("person", 0),
-        "bicycle_count": totals.get("bicycle", 0),
-        "motorcycle_count": totals.get("motorcycle", 0),
-        "truck_count": totals.get("truck", 0),
-        "bus_count": totals.get("bus", 0),
-        "skater_count": totals.get("skater", 0),
-        "pet_count": totals.get("pet", 0),
-    }
+    payload: dict = {"datetime": when_iso}
+    payload.update(_api_counts(totals))
+    # CON dirección: line + direction_counts (aunque vayan vacíos parciales)
+    if line is not None:
+        payload["line"] = {"x1": float(line["x1"]), "y1": float(line["y1"]),
+                           "x2": float(line["x2"]), "y2": float(line["y2"])}
+        dc = direction_counts or {"a_to_b": {}, "b_to_a": {}}
+        payload["direction_counts"] = {
+            "a_to_b": dict(dc.get("a_to_b", {})),
+            "b_to_a": dict(dc.get("b_to_a", {})),
+        }
+    return payload
 
 
 class SyncClient:
@@ -80,13 +109,25 @@ class SyncClient:
 
     def flush(self) -> bool:
         """Envia agregados pendientes. Retorna True si quedo al dia."""
+        # Eventos pendientes para totales + dirección
+        try:
+            events = self.store.pending_events()
+        except AttributeError:
+            events = []
         totals = self.store.pending_totals()
         if sum(totals.values()) == 0:
             self.on_status(True, "al dia")
             return True
-        payload = totals_payload(totals)
-        # Hook direccion (aun no enviado; la API solo acepta totales):
-        _future = build_direction_payload([])  # noqa: F841
+        line = (self.cfg or {}).get("line")
+        if line:
+            direction_counts = build_direction_payload(events)
+            # Consistencia: totales = suma direccional (si hay mezcla sin
+            # dirección por conteo por aparición, igual se envían totales).
+            payload = totals_payload(totals, line=line,
+                                     direction_counts=direction_counts)
+        else:
+            # SIN dirección: backward-compatible, sin keys line/direction_counts
+            payload = totals_payload(totals)
         try:
             r = requests.post(self.api + "/api/trafico/", json=payload,
                               headers=self._headers(), timeout=self.timeout)

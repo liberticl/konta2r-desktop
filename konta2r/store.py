@@ -64,6 +64,14 @@ class Store:
         with self._conn() as c:
             return [r[0] for r in c.execute("SELECT id FROM events WHERE synced=0")]
 
+    def pending_events(self, limit: int = 100000):
+        """Eventos sin sincronizar para armar direction_counts."""
+        with self._conn() as c:
+            c.row_factory = sqlite3.Row
+            return [dict(r) for r in c.execute(
+                "SELECT * FROM events WHERE synced=0 ORDER BY id ASC LIMIT ?",
+                (limit,))]
+
     def mark_synced(self, ids) -> int:
         ids = list(ids)
         if not ids:
