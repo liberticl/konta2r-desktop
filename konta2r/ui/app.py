@@ -2,6 +2,7 @@
 from __future__ import annotations
 import datetime
 import os
+import secrets
 import threading
 import time
 
@@ -59,6 +60,10 @@ class App:
         self.sess = None
         self.model_size = int(self.cfg.get("model_size", 320))
         self.running, self.line_mode = False, False
+        self.measuring = False
+        self.sync_client = None
+        self.btn_measure = None
+        self.lbl_measure = None
         self.line_pts: list = []       # clicks display (x,y)
         self.mouse_pos = None          # rubber-band preview (web parity)
         self.avail_cams: list = []
@@ -79,6 +84,13 @@ class App:
         self.root.geometry("1100x700")
         self.lbl_status = ctk.CTkLabel(self.root, text="iniciando...")
         self.lbl_status.pack(pady=2)
+        top = ctk.CTkFrame(self.root)
+        top.pack(fill="x", padx=8)
+        self.lbl_measure = ctk.CTkLabel(top, text="● Sin medición", text_color="gray")
+        self.lbl_measure.pack(side="left", padx=4)
+        self.btn_measure = ctk.CTkButton(top, text="▶ Iniciar medición",
+                                          fg_color="green", command=self.toggle_measure)
+        self.btn_measure.pack(side="right", padx=4, pady=4)
         body = ctk.CTkFrame(self.root)
         body.pack(fill="both", expand=True, padx=8, pady=4)
         self.canvas = ctk.CTkCanvas(body, width=760, height=520,
@@ -217,8 +229,13 @@ class App:
                               "label": d["label"], "color": d["color"],
                               "score": d["score"], "modelClass": d["modelClass"]})
             line = self._active_line(disp_w, disp_h)
-            for ev in self.tracker.update(boxes, now, line):
-                self._register(ev["track"], ev["direction"])
+            if self.measuring:
+                for ev in self.tracker.update(boxes, now, line):
+                    self._register(ev["track"], ev["direction"])
+            else:
+                # preview sin conteo: limpia tracks para no arrastrar
+                if self.tracker.tracks:
+                    self.tracker.reset()
             self.disp_boxes = boxes
             if self.recording and self.writer is not None:
                 try:
@@ -389,6 +406,93 @@ class App:
             self.line_pts = []
             self._status("modo linea: haz 2 clics en el preview" if self.line_mode
                          else "modo linea off")
+
+    def toggle_measure(self):
+        if not self.measuring:
+            self._start_measure()
+        else:
+            self._ask_finish()
+
+    def _ensure_sync_client(self):
+        if self.sync_client is None:
+            self.sync_client = sync_mod.SyncClient(
+                self.cfg.get("api_base", "https://andeschileong.cl"),
+                self.db, self.cfg, on_status=lambda ok, m: None)
+        return self.sync_client
+
+    def _start_measure(self):
+        if self.sess is None:
+            self._status("modelo aún cargando, espera…")
+            return
+        if not self.running:
+            self.start()
+            if not self.running:
+                return
+        # sesión nueva + contadores en cero
+        self.session_id = ("sesion_" + datetime.datetime.now().isoformat()
+                           .replace(":", "-").replace(".", "-"))
+        self.tracker.reset()
+        self.counts = {k: 0 for k in KEYS}
+        for k, lbl in self.count_labels.items():
+            try:
+                lbl.configure(text="0")
+            except Exception:  # noqa: BLE001
+                pass
+        self.measuring = True
+        try:
+            cl = self._ensure_sync_client()
+            cl.schedule_periodic(float(self.cfg.get("sync_interval_min", 5)))
+            cl.flush()
+        except Exception:  # noqa: BLE001
+            pass
+        self.btn_measure.configure(text="■ Finalizar medición", fg_color="red")
+        self.lbl_measure.configure(text="● Midiendo…", text_color="red")
+        self._status("medición iniciada: conteo + envío API activos")
+        self._toast("Medición iniciada\nConteo y envío API activos")
+
+    def _ask_finish(self):
+        code = f"{secrets.randbelow(9000) + 1000}"
+        win = ctk.CTkToplevel(self.root)
+        win.title("Finalizar medición")
+        win.geometry("360x230")
+        win.attributes("-topmost", True)
+        ctk.CTkLabel(win, text="⚠ Finalizar medición",
+                     font=("Arial", 15, "bold")).pack(pady=(12, 4))
+        ctk.CTkLabel(win, text="Para confirmar, escribe este código:",
+                     wraplength=320).pack()
+        ctk.CTkLabel(win, text=code,
+                     font=("Courier", 28, "bold")).pack(pady=4)
+        entry = ctk.CTkEntry(win, placeholder_text="4 dígitos", justify="center")
+        entry.pack(pady=4)
+        err = ctk.CTkLabel(win, text="", text_color="red")
+        err.pack()
+        entry.focus_set()
+
+        def _ok(_ev=None):
+            if entry.get().strip() == code:
+                win.destroy()
+                self._finish_measure()
+            else:
+                err.configure(text="Código incorrecto, sigue midiendo")
+        ctk.CTkButton(win, text="Confirmar cierre", fg_color="red",
+                      command=_ok).pack(pady=4)
+        ctk.CTkButton(win, text="Seguir midiendo",
+                      command=win.destroy).pack()
+        entry.bind("<Return>", _ok)
+
+    def _finish_measure(self):
+        self.measuring = False
+        try:
+            if self.sync_client is not None:
+                self.sync_client.flush()
+                self.sync_client.cancel_retry()
+        except Exception:  # noqa: BLE001
+            pass
+        self.btn_measure.configure(text="▶ Iniciar medición", fg_color="green")
+        self.lbl_measure.configure(text="● Sin medición", text_color="gray")
+        total = sum(self.counts.values())
+        self._status(f"medición finalizada: {total} eventos")
+        self._toast(f"Medición finalizada\n{total} eventos enviados a cola")
 
     def toggle_record(self):
         if not self.recording:
@@ -588,15 +692,15 @@ def main(argv=None):
         config_store.save(cfg)
 
     def _bg():
+        # solo registro inicial; el envío periódico corre solo en medición
         try:
             client = sync_mod.SyncClient(cfg.get("api_base", "https://andeschileong.cl"),
                                          app.db, cfg, on_status=lambda ok, m: None)
+            app.sync_client = client
             if not cfg.get("token"):
                 client.register(cfg["fingerprint"], fp_mod.user_agent(),
                                 cfg.get("coords", ""))
                 config_store.save(cfg)
-            client.schedule_periodic(float(cfg.get("sync_interval_min", 5)))
-            client.flush()
         except Exception:  # noqa: BLE001
             pass
     threading.Thread(target=_bg, daemon=True).start()
