@@ -63,6 +63,7 @@ class App:
         self.running, self.line_mode = False, False
         self.measuring = False
         self.sync_client = None
+        self.debug_localhost = False  # solo sesión, no persistente, default off
         self.btn_measure = None
         self.lbl_measure = None
         self._term_win = None
@@ -448,11 +449,19 @@ class App:
         else:
             self._ask_finish()
 
+    def _effective_api(self) -> str:
+        if getattr(self, "debug_localhost", False):
+            return "http://localhost:8000"
+        return (self.cfg.get("api_base") or "https://andeschileong.cl").rstrip("/")
+
     def _ensure_sync_client(self):
+        api = self._effective_api()
         if self.sync_client is None:
             self.sync_client = sync_mod.SyncClient(
-                self.cfg.get("api_base", "https://andeschileong.cl"),
-                self.db, self.cfg, on_status=lambda ok, m: self._status(m))
+                api, self.db, self.cfg,
+                on_status=lambda ok, m: self._status(m))
+        else:
+            self.sync_client.api = api
         return self.sync_client
 
     def toggle_terminal(self):
@@ -720,6 +729,58 @@ class App:
         e_side_b = ctk.CTkEntry(scroll, placeholder_text="Ej: Sur / Salida")
         e_side_b.insert(0, self.cfg.get("side_b", ""))
         e_side_b.pack(fill="x", padx=12)
+        # Debug: host a localhost, solo sesión, default off, con código 4 dígitos
+        ctk.CTkLabel(scroll, text="Debug API").pack(pady=(10, 0))
+        lbl_dbg = ctk.CTkLabel(scroll, text="", wraplength=380, justify="left",
+                               text_color="gray")
+        lbl_dbg.pack(padx=12)
+
+        def _refresh_dbg():
+            if self.debug_localhost:
+                lbl_dbg.configure(text="ON → http://localhost:8000 (solo esta sesión)")
+                btn_dbg.configure(text="Desactivar debug", fg_color="orange")
+            else:
+                lbl_dbg.configure(text=f"OFF → {(self.cfg.get('api_base') or 'https://andeschileong.cl')}")
+                btn_dbg.configure(text="Activar debug → localhost", fg_color="gray")
+        def _toggle_dbg():
+            if self.debug_localhost:
+                self.debug_localhost = False
+                self._ensure_sync_client()
+                self._status("debug OFF: API producción")
+                _refresh_dbg()
+                return
+            code = f"{secrets.randbelow(9000) + 1000}"
+            win2 = ctk.CTkToplevel(win)
+            win2.title("Activar debug")
+            win2.geometry("320x220")
+            win2.attributes("-topmost", True)
+            ctk.CTkLabel(win2, text="⚠ Apuntar API a localhost",
+                         font=("Arial", 14, "bold")).pack(pady=(10, 2))
+            ctk.CTkLabel(win2, text="Para activar, escribe este código:",
+                         wraplength=280).pack()
+            ctk.CTkLabel(win2, text=code,
+                         font=("Courier", 26, "bold")).pack(pady=4)
+            entry = ctk.CTkEntry(win2, placeholder_text="4 dígitos", justify="center")
+            entry.pack(pady=4)
+            err = ctk.CTkLabel(win2, text="", text_color="red")
+            err.pack()
+            entry.focus_set()
+            def _ok(_ev=None):
+                if entry.get().strip() == code:
+                    win2.destroy()
+                    self.debug_localhost = True
+                    self._ensure_sync_client()
+                    self._status("debug ON: API http://localhost:8000 (no persistente)")
+                    self._toast("Debug ON\nhttp://localhost:8000")
+                    _refresh_dbg()
+                else:
+                    err.configure(text="Código incorrecto")
+            ctk.CTkButton(win2, text="Activar", fg_color="orange",
+                          command=_ok).pack(pady=2)
+            entry.bind("<Return>", _ok)
+        btn_dbg = ctk.CTkButton(scroll, text="", command=_toggle_dbg)
+        btn_dbg.pack(fill="x", padx=12, pady=4)
+        _refresh_dbg()
 
         def _save():
             for k, v in self._cls_vars.items():
