@@ -25,6 +25,7 @@ from konta2r import store as store_mod
 from konta2r import sync_client as sync_mod
 from konta2r import export_csv as csv_mod
 from konta2r import geocode as geocode_mod
+from konta2r import debug as dbg_mod
 from konta2r.capture import Camera, enumerate_cameras, list_cameras, camera_label, label_to_index
 
 KEYS = ("person", "bicycle", "skater", "car", "motorcycle", "bus", "truck", "pet")
@@ -64,6 +65,8 @@ class App:
         self.sync_client = None
         self.btn_measure = None
         self.lbl_measure = None
+        self._term_win = None
+        self._term_text = None
         self.line_pts: list = []       # clicks display (x,y)
         self.mouse_pos = None          # rubber-band preview (web parity)
         self.avail_cams: list = []
@@ -139,7 +142,8 @@ class App:
                          ("Foto", self.save_photo),
                          ("CSV", self.save_csv),
                          ("Linea", self.toggle_line),
-                         ("Config", self.open_config)]:
+                         ("Config", self.open_config),
+                         ("Terminal", self.toggle_terminal)]:
             ctk.CTkButton(side, text=txt, command=cmd).pack(fill="x", pady=2)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
@@ -161,6 +165,18 @@ class App:
     def _status(self, msg):
         try:
             self.lbl_status.configure(text=msg)
+        except Exception:
+            pass
+        try:
+            dbg_mod.log(msg)
+        except Exception:
+            pass
+        try:
+            if getattr(self, "_term_text", None) is not None:
+                self._term_text.configure(state="normal")
+                self._term_text.insert("end", f"{msg}\n")
+                self._term_text.see("end")
+                self._term_text.configure(state="disabled")
         except Exception:
             pass
 
@@ -417,8 +433,36 @@ class App:
         if self.sync_client is None:
             self.sync_client = sync_mod.SyncClient(
                 self.cfg.get("api_base", "https://andeschileong.cl"),
-                self.db, self.cfg, on_status=lambda ok, m: None)
+                self.db, self.cfg, on_status=lambda ok, m: self._status(m))
         return self.sync_client
+
+    def toggle_terminal(self):
+        """Terminal de debug estilo web (log en vivo + archivo)."""
+        if getattr(self, "_term_win", None) is not None:
+            try:
+                self._term_win.destroy()
+            except Exception:  # noqa: BLE001
+                pass
+            self._term_win = None
+            self._term_text = None
+            return
+        win = ctk.CTkToplevel(self.root)
+        win.title(f"Debug — {dbg_mod.LOG_PATH}")
+        win.geometry("560x340")
+        self._term_win = win
+        txt = ctk.CTkTextbox(win, wrap="word")
+        txt.pack(fill="both", expand=True, padx=8, pady=8)
+        try:
+            for line in dbg_mod.read_tail(200):
+                txt.insert("end", line + "\n")
+            txt.see("end")
+        except Exception:  # noqa: BLE001
+            pass
+        txt.configure(state="disabled")
+        self._term_text = txt
+        ctk.CTkLabel(win, text=f"Archivo: {dbg_mod.LOG_PATH}",
+                     text_color="gray").pack(pady=(0, 6))
+        win.protocol("WM_DELETE_WINDOW", self.toggle_terminal)
 
     def _start_measure(self):
         if self.sess is None:
@@ -655,11 +699,22 @@ class App:
                 self.cfg["clases_activas"][k] = bool(v.get())
             ms = int(self.cfg.get("model_size", 320))
             new_size = 640 if ms >= 480 else 320
+            old_name = (self.cfg.get("device_name") or "")
             self.cfg["model_size"] = new_size
             self.cfg["device_name"] = e_name.get().strip()[:200]
             self.cfg["coords"] = e_coords.get().strip()
             config_store.save(self.cfg)
             win.destroy()
+            # PATCH nombre en API si cambió y hay token (como la web)
+            if self.cfg["device_name"] != old_name and self.cfg.get("token"):
+                new_name = self.cfg["device_name"]
+                def _rn():
+                    try:
+                        self._ensure_sync_client().rename(new_name)
+                        self._status(f"nombre API: {new_name}")
+                    except Exception as exc:  # noqa: BLE001
+                        self._status(f"rename fallo: {exc}")
+                threading.Thread(target=_rn, daemon=True).start()
             if self._reload_model(new_size):
                 self._status(f"config guardada, recargando modelo {new_size}px…")
             else:

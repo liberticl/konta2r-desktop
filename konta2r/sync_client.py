@@ -4,6 +4,8 @@ import datetime
 import threading
 import requests
 
+from konta2r import debug as dbg
+
 # interno tracker/store -> campo API
 KEY_TO_API = {
     "car": "car_count",
@@ -88,6 +90,7 @@ class SyncClient:
             return False
 
     def register(self, fingerprint: str, user_agent: str, coords: str = ""):
+        dbg.log(f"API register {self.api}/api/trafico/register/ fp={fingerprint[:12]}…")
         r = requests.post(self.api + "/api/trafico/register/",
                           json={"fingerprint": fingerprint,
                                 "user_agent": user_agent, "coords": coords},
@@ -97,14 +100,17 @@ class SyncClient:
         self.cfg["token"] = data.get("token", "")
         if data.get("device_name") and not self.cfg.get("device_name"):
             self.cfg["device_name"] = data["device_name"]
+        dbg.log(f"API register OK device={data.get('device_name')} id={data.get('device_id')}")
         self.on_status(True, "registrado")
         return data
 
     def rename(self, name: str):
+        dbg.log(f"API PATCH device nombre={name!r}")
         r = requests.patch(self.api + "/api/trafico/device/",
                            json={"name": name}, headers=self._headers(),
                            timeout=self.timeout)
         r.raise_for_status()
+        dbg.log("API rename OK")
         return r.json()
 
     def flush(self) -> bool:
@@ -128,15 +134,18 @@ class SyncClient:
         else:
             # SIN dirección: backward-compatible, sin keys line/direction_counts
             payload = totals_payload(totals)
+        dbg.log(f"API POST /api/trafico/ {payload}")
         try:
             r = requests.post(self.api + "/api/trafico/", json=payload,
                               headers=self._headers(), timeout=self.timeout)
             r.raise_for_status()
         except requests.RequestException as exc:
+            dbg.log(f"API POST fallo: {exc.__class__.__name__}: {exc}")
             self.on_status(False, f"sin conexion: {exc.__class__.__name__}")
             self.schedule_retry()
             return False
         self.store.mark_synced(self.store.pending_ids())
+        dbg.log(f"API POST 201 sincronizado: {payload}")
         self.on_status(True, "sincronizado")
         return True
 
