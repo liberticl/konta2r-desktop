@@ -139,41 +139,84 @@ class SyncClient:
         dbg.log("API rename OK")
         return r.json()
 
+    def _event_payload(self, ev: dict) -> dict:
+        """Un registro único por evento, con su datetime real de creación."""
+        key = ev.get("detected_key", "")
+        totals = {key: 1} if key else {}
+        when = ev.get("timestamp_iso") or None
+        direction = (ev.get("direction") or "").strip()
+        line = (self.cfg or {}).get("line")
+        if direction in ("A->B", "B->A") and line:
+            api_field = KEY_TO_API.get(key)
+            dc = {"a_to_b": {}, "b_to_a": {}}
+            if api_field:
+                if direction == "A->B":
+                    dc["a_to_b"][api_field] = 1
+                else:
+                    dc["b_to_a"][api_field] = 1
+            sides = {"a": (self.cfg or {}).get("side_a", ""),
+                     "b": (self.cfg or {}).get("side_b", "")}
+            return totals_payload(totals, when_iso=when,
+                                  line=line, direction_counts=dc,
+                                  side_names=sides)
+        # sin dirección (aparición o sin línea): solo totales + datetime real
+        return totals_payload(totals, when_iso=when)
+
     def flush(self) -> bool:
-        """Envia agregados pendientes. Retorna True si quedo al dia."""
-        # Eventos pendientes para totales + dirección
+        """Envía un POST por evento pendiente, cada uno con su datetime real.
+
+        Así, tras un offline, en el servidor quedan los datetime de
+        creación uno por uno en vez de un agregado con la hora del envío.
+        Solo marca synced lo que el servidor aceptó (201).
+        """
         try:
             events = self.store.pending_events()
         except AttributeError:
             events = []
-        totals = self.store.pending_totals()
-        if sum(totals.values()) == 0:
+        if not events:
             self.on_status(True, "al dia")
             return True
-        line = (self.cfg or {}).get("line")
-        if line:
-            direction_counts = build_direction_payload(events)
-            sides = {"a": (self.cfg or {}).get("side_a", ""),
-                     "b": (self.cfg or {}).get("side_b", "")}
-            payload = totals_payload(totals, line=line,
-                                     direction_counts=direction_counts,
-                                     side_names=sides)
-        else:
-            # SIN dirección: backward-compatible, sin keys line/direction_counts
-            payload = totals_payload(totals)
-        dbg.log(f"API POST /api/trafico/ {payload}")
-        try:
-            r = requests.post(self.api + "/api/trafico/", json=payload,
-                              headers=self._headers(), timeout=self.timeout)
-            r.raise_for_status()
-        except requests.RequestException as exc:
-            dbg.log(f"API POST fallo: {exc.__class__.__name__}: {exc}")
-            self.on_status(False, f"sin conexion: {exc.__class__.__name__}")
+        sent, failed = 0, 0
+        for ev in events:
+            payload = self._event_payload(ev)
+            if len(payload) <= 1:  # sin conteos válidos
+                self.store.mark_synced([ev["id"]])
+                continue
+            dbg.log(f"API POST /api/trafico/ {payload}")
+            try:
+                r = requests.post(self.api + "/api/trafico/", json=payload,
+                                  headers=self._headers(), timeout=self.timeout)
+                if r.status_code in (401, 403):
+                    dbg.log(f"API POST {r.status_code}: token inválido, re-registrando")
+                    try:
+                        from konta2r import fingerprint as fp_mod
+                        self.register((self.cfg or {}).get("fingerprint", "")
+                                      or fp_mod.fingerprint((self.cfg or {}).get("coords", "")),
+                                      fp_mod.user_agent(),
+                                      (self.cfg or {}).get("coords", ""))
+                        r = requests.post(self.api + "/api/trafico/", json=payload,
+                                          headers=self._headers(), timeout=self.timeout)
+                    except Exception as exc2:  # noqa: BLE001
+                        dbg.log(f"re-registro falló: {exc2}")
+                        failed += 1
+                        break
+                    if r.status_code in (401, 403):
+                        dbg.log("API sigue 401/403 tras re-registro; se reintenta luego")
+                        failed += 1
+                        break
+                r.raise_for_status()
+            except requests.RequestException as exc:
+                dbg.log(f"API POST fallo: {exc.__class__.__name__}: {exc}")
+                failed += 1
+                break
+            self.store.mark_synced([ev["id"]])
+            sent += 1
+        if failed:
+            self.on_status(False, f"pendientes: {failed} (enviados {sent})")
             self.schedule_retry()
             return False
-        self.store.mark_synced(self.store.pending_ids())
-        dbg.log(f"API POST 201 sincronizado: {payload}")
-        self.on_status(True, "sincronizado")
+        dbg.log(f"API sincronizados: {sent}")
+        self.on_status(True, f"sincronizado ({sent})")
         return True
 
     def schedule_retry(self, interval_min: float = 1.0):
