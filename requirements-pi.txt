@@ -1,0 +1,10 @@
+# Raspberry Pi 4B (aarch64): usa headless (sin GUI Qt) y onnxruntime ARM.
+# Instala con: pip install -r requirements-pi.txt
+opencv-python-headless>=4.8
+onnxruntime>=1.17  # en Pi4B: pip busca wheel aarch64; si falla usa onnxruntime==1.17.* desde piwheels
+numpy>=1.24
+Pillow>=10
+customtkinter>=5.2
+requests>=2.31
+# Nota: en Raspberry Pi OS Lite no hay X; la UI Tk requiere escritorio o X-forwarding.
+# Para modo sin pantalla usa las clases Tracker/Store/SyncClient por separado.
