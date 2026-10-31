@@ -1,18 +1,66 @@
 """Captura con camara local (sin URL/HLS/archivo)."""
 from __future__ import annotations
 import cv2
+import os
+import re
+import subprocess
 
 
-def enumerate_cameras(max_index: int = 10):
-    """Prueba indices 0..max_index-1, retorna los que abren."""
-    found = []
+def _friendly_names() -> dict[int, str]:
+    """Índice -> nombre amigable. v4l2-ctl, luego sysfs, si no 'Cámara N'."""
+    names: dict[int, str] = {}
+    try:
+        out = subprocess.run(["v4l2-ctl", "--list-devices"],
+                             capture_output=True, text=True, timeout=5).stdout
+        cur = ""
+        for line in out.splitlines():
+            if line and not line.startswith(("\t", " ")):
+                cur = line.strip().rstrip(":").split("(")[0].strip() or cur
+            m = re.search(r"/dev/video(\d+)", line)
+            if m:
+                idx = int(m.group(1))
+                if idx not in names and cur:
+                    names[idx] = cur
+    except Exception:  # noqa: BLE001
+        pass
+    return names
+
+
+def _sysfs_name(i: int) -> str:
+    try:
+        with open(f"/sys/class/video4linux/video{i}/name", encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""
+
+
+def list_cameras(max_index: int = 10) -> list[tuple[int, str]]:
+    """Solo disponibles: [(index, nombre)]. Prueba apertura real."""
+    sys_names = _friendly_names()
+    found: list[tuple[int, str]] = []
     for i in range(max_index):
         cap = cv2.VideoCapture(i)
         ok = cap.isOpened()
         cap.release()
         if ok:
-            found.append(i)
+            nm = sys_names.get(i) or _sysfs_name(i) or f"Cámara {i}"
+            found.append((i, nm))
     return found
+
+
+def camera_label(index: int, name: str) -> str:
+    short = re.sub(r"\s+", " ", name or "").strip()[:40] or f"Cámara {index}"
+    return f"{index} · {short}"
+
+
+def label_to_index(label: str) -> int | None:
+    m = re.match(r"\s*(\d+)", label or "")
+    return int(m.group(1)) if m else None
+
+
+def enumerate_cameras(max_index: int = 10):
+    """Compat: solo índices disponibles."""
+    return [i for i, _ in list_cameras(max_index)]
 
 
 class Camera:

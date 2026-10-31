@@ -24,7 +24,7 @@ from konta2r import store as store_mod
 from konta2r import sync_client as sync_mod
 from konta2r import export_csv as csv_mod
 from konta2r import geocode as geocode_mod
-from konta2r.capture import Camera, enumerate_cameras
+from konta2r.capture import Camera, enumerate_cameras, list_cameras, camera_label, label_to_index
 
 KEYS = ("person", "bicycle", "skater", "car", "motorcycle", "bus", "truck", "pet")
 LABELS = {"person": "Peatones", "bicycle": "Bicis", "skater": "Patinetas",
@@ -62,6 +62,8 @@ class App:
         self.line_pts: list = []       # clicks display (x,y)
         self.mouse_pos = None          # rubber-band preview (web parity)
         self.avail_cams: list = []
+        self.cam_options: dict = {}
+        self._status_pending_cam = None
         self.cam_var = None
         self.cam_menu = None
         self.frame, self.disp_boxes = None, []
@@ -86,18 +88,29 @@ class App:
         self.canvas.bind("<Motion>", self._on_canvas_move)
         side = ctk.CTkFrame(body, width=300)
         side.pack(side="right", fill="y", padx=6)
-        # selector de cámara (1)
+        # selector de cámara con nombre, solo disponibles
         ctk.CTkLabel(side, text="Cámara").pack(anchor="w")
-        self.cam_var = ctk.StringVar(value=str(self.cfg.get("camera_index", 0)))
+        self.cam_options: dict[str, int] = {}
+        self.cam_var = ctk.StringVar(value="")
         try:
-            self.avail_cams = enumerate_cameras()
+            cams = list_cameras()
         except Exception:  # noqa: BLE001
-            self.avail_cams = []
-        if int(self.cfg.get("camera_index", 0)) not in self.avail_cams:
-            self.avail_cams = sorted(set(self.avail_cams + [int(self.cfg.get("camera_index", 0))]))
+            cams = []
+        self.avail_cams = [i for i, _ in cams]
+        for i, nm in cams:
+            self.cam_options[camera_label(i, nm)] = i
+        cur_idx = int(self.cfg.get("camera_index", 0))
+        cur_label = next((lb for lb, ix in self.cam_options.items() if ix == cur_idx), None)
+        if cur_label is None:
+            # configurada no disponible (desconectada): solo disponibles
+            cur_label = next(iter(self.cam_options), "0")
+            self._status_pending_cam = cur_idx
+        else:
+            self._status_pending_cam = None
+        self.cam_var.set(cur_label)
         self.cam_menu = ctk.CTkOptionMenu(
             side, variable=self.cam_var,
-            values=[str(i) for i in self.avail_cams] or ["0"],
+            values=list(self.cam_options) or ["0 · sin cámaras"],
             command=self._switch_camera)
         self.cam_menu.pack(fill="x", pady=(0, 4))
         ctk.CTkButton(side, text="↻ Recargar cámaras",
@@ -139,12 +152,39 @@ class App:
         except Exception:
             pass
 
+    def _toast(self, msg, ms: int = 2500):
+        """Notificación push in-app: popup que se autocierra."""
+        try:
+            t = ctk.CTkToplevel(self.root)
+            t.overrideredirect(True)
+            t.attributes("-topmost", True)
+            lbl = ctk.CTkLabel(t, text=msg, wraplength=300, justify="left")
+            lbl.pack(padx=14, pady=10)
+            try:
+                t.update_idletasks()
+                x = self.root.winfo_x() + self.root.winfo_width() - t.winfo_reqwidth() - 20
+                y = self.root.winfo_y() + self.root.winfo_height() - t.winfo_reqheight() - 20
+                t.geometry(f"+{max(0, x)}+{max(0, y)}")
+            except Exception:  # noqa: BLE001
+                pass
+            t.after(ms, t.destroy)
+        except Exception:  # noqa: BLE001
+            pass
+
     # ---- loop ----
     def start(self):
         if not self.cam.open():
-            cams = enumerate_cameras()
-            self._status(f"sin camara idx {self.cam.index}. Disponibles: {cams}")
+            try:
+                cams = list_cameras()
+            except Exception:  # noqa: BLE001
+                cams = []
+            names = ", ".join(camera_label(i, n) for i, n in cams) or "ninguna"
+            self._status(f"cámara {self.cam.index} no disponible ({names}). Recarga y elige otra.")
+            self.running = False
             return
+        if getattr(self, "_status_pending_cam", None) is not None:
+            self._status(f"cámara {self._status_pending_cam} desconectada, usando {self.cam.index}")
+            self._status_pending_cam = None
         self.running = True
         threading.Thread(target=self._loop, daemon=True).start()
         self._render_schedule()
@@ -294,20 +334,30 @@ class App:
 
     def _refresh_cameras(self):
         try:
-            self.avail_cams = enumerate_cameras()
+            cams = list_cameras()
         except Exception as exc:  # noqa: BLE001
             self._status(f"error enumerando cámaras: {exc}")
             return
-        if not self.avail_cams:
-            self._status("sin cámaras detectadas")
+        self.cam_options = {camera_label(i, nm): i for i, nm in cams}
+        self.avail_cams = [i for i, _ in cams]
+        if not self.cam_options:
+            self.cam_menu.configure(values=["sin cámaras"])
+            self._status("sin cámaras detectadas (¿desconectada?)")
+            self.running = False
             return
-        self.cam_menu.configure(values=[str(i) for i in self.avail_cams])
-        self._status(f"cámaras: {self.avail_cams}")
+        self.cam_menu.configure(values=list(self.cam_options))
+        cur = int(self.cfg.get("camera_index", 0))
+        if cur not in self.avail_cams:
+            self._status(f"cámara {cur} desconectada. Elige una disponible.")
+            # selecciona la primera sin cambiar sola
+            first = next(iter(self.cam_options))
+            self.cam_var.set(first)
+            return
+        self._status(f"cámaras: {[f'{i}' for i in self.avail_cams]}")
 
     def _switch_camera(self, choice):
-        try:
-            idx = int(choice)
-        except ValueError:
+        idx = label_to_index(choice)
+        if idx is None:
             return
         was_running = self.running
         self.running = False
@@ -391,24 +441,27 @@ class App:
                 lbl.configure(text=fmt.format(self.cfg[key]))
             ctk.CTkSlider(scroll, from_=lo, to=hi, variable=var,
                           command=_cb).pack(fill="x", padx=12)
-        # (1) selector de cámara en config (sincronizado con el lateral)
+        # selector de cámara en config (nombres, solo disponibles)
         ctk.CTkLabel(scroll, text="Cámara").pack()
-        cam_var_cfg = ctk.StringVar(value=str(self.cfg.get("camera_index", 0)))
         try:
-            cams_cfg = enumerate_cameras()
+            cams_cfg = list_cameras()
         except Exception:  # noqa: BLE001
             cams_cfg = []
-        if not cams_cfg:
-            cams_cfg = [int(self.cfg.get("camera_index", 0))]
+        opts_cfg = {camera_label(i, n): i for i, n in cams_cfg} or {"sin cámaras": -1}
+        cur_cfg = next((lb for lb, ix in opts_cfg.items()
+                        if ix == int(self.cfg.get("camera_index", 0))), next(iter(opts_cfg)))
+        cam_var_cfg = ctk.StringVar(value=cur_cfg)
 
         def _cfg_cam(choice):
+            if label_to_index(choice) is None or label_to_index(choice) < 0:
+                return
             self._switch_camera(choice)
             try:
                 self.cam_var.set(choice)
             except Exception:  # noqa: BLE001
                 pass
         ctk.CTkOptionMenu(scroll, variable=cam_var_cfg,
-                          values=[str(i) for i in cams_cfg],
+                          values=list(opts_cfg),
                           command=_cfg_cam).pack(fill="x", padx=12)
         row_slider("Confianza", "conf_threshold", 0.1, 0.9)
         row_slider("Sync minutos", "sync_interval_min", 1, 60)
@@ -423,34 +476,66 @@ class App:
         e_name = ctk.CTkEntry(scroll)
         e_name.insert(0, self.cfg.get("device_name", ""))
         e_name.pack(fill="x", padx=12)
-        # (3) dirección -> coords vía Nominatim gratuita
+        # dirección -> coords vía Nominatim gratuita (con confirmación)
         ctk.CTkLabel(scroll, text="Dirección (para obtener coords)").pack()
-        e_addr = ctk.CTkEntry(scroll, placeholder_text="Ej: Av. Apoquindo 3400, Las Condes")
+        e_addr = ctk.CTkEntry(scroll, placeholder_text="Ej: Cangreja 125, Valparaíso")
         e_addr.pack(fill="x", padx=12)
-        lbl_geo = ctk.CTkLabel(scroll, text="", wraplength=380, justify="left")
-        lbl_geo.pack(padx=12)
+        card = ctk.CTkFrame(scroll)
+        card.pack(fill="x", padx=12, pady=6)
+        lbl_geo_title = ctk.CTkLabel(card, text="Sin búsqueda aún",
+                                     wraplength=360, justify="left",
+                                     font=("Arial", 13, "bold"))
+        lbl_geo_title.pack(anchor="w", padx=8, pady=(6, 0))
+        lbl_geo_coords = ctk.CTkLabel(card, text="", wraplength=360, justify="left",
+                                      font=("Courier", 12))
+        lbl_geo_coords.pack(anchor="w", padx=8)
+        lbl_geo_full = ctk.CTkLabel(card, text="", wraplength=360, justify="left",
+                                    text_color="gray", font=("Arial", 11))
+        lbl_geo_full.pack(anchor="w", padx=8, pady=(0, 6))
+        btn_usar = ctk.CTkButton(card, text="Usar estas coordenadas", state="disabled")
+        btn_usar.pack(fill="x", padx=8, pady=(0, 8))
+        self._geo_pending = None
+
+        def _confirm_geo():
+            if not self._geo_pending:
+                return
+            lat, lon, _name = self._geo_pending
+            self.cfg["coords"] = f"{lat},{lon}"
+            config_store.save(self.cfg)
+            try:
+                e_coords.delete(0, "end")
+                e_coords.insert(0, self.cfg["coords"])
+            except Exception:  # noqa: BLE001
+                pass
+            self._status(f"coords: {lat},{lon}")
+            self._toast(f"Coordenadas guardadas\n{lat},{lon}")
+            btn_usar.configure(state="disabled")
+        btn_usar.configure(command=_confirm_geo)
 
         def _buscar():
-            lbl_geo.configure(text="buscando...")
+            lbl_geo_title.configure(text="Buscando…")
+            lbl_geo_coords.configure(text="")
+            lbl_geo_full.configure(text="")
+            btn_usar.configure(state="disabled")
+            self._geo_pending = None
             addr = e_addr.get().strip()
             if not addr:
-                lbl_geo.configure(text="escribe una dirección")
+                lbl_geo_title.configure(text="Escribe una dirección")
                 return
 
             def _t():
                 try:
                     lat, lon, name = geocode_mod.forward(addr)
-                    self.cfg["coords"] = f"{lat},{lon}"
-                    config_store.save(self.cfg)
-                    try:
-                        e_coords.delete(0, "end")
-                        e_coords.insert(0, self.cfg["coords"])
-                    except Exception:  # noqa: BLE001
-                        pass
-                    lbl_geo.configure(text=f"{lat},{lon}\n{name[:160]}")
-                    self._status(f"coords: {lat},{lon}")
+                    parts = [p.strip() for p in name.split(",")]
+                    short = ", ".join(parts[:2]) if len(parts) >= 2 else name[:80]
+                    self._geo_pending = (lat, lon, name)
+                    lbl_geo_title.configure(text=short[:90])
+                    lbl_geo_coords.configure(text=f"{lat}, {lon}")
+                    lbl_geo_full.configure(text=name[:220])
+                    btn_usar.configure(state="normal")
                 except Exception as exc:  # noqa: BLE001
-                    lbl_geo.configure(text=f"error: {exc}")
+                    lbl_geo_title.configure(text="Sin resultados")
+                    lbl_geo_full.configure(text=str(exc)[:200])
             threading.Thread(target=_t, daemon=True).start()
         ctk.CTkButton(scroll, text="Buscar dirección → coords",
                       command=_buscar).pack(fill="x", padx=12, pady=4)
