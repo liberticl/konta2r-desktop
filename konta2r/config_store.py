@@ -21,6 +21,7 @@ DEFAULTS = {
     "model_size": st.MODEL_DEFAULT,
     "conf_threshold": st.CONF_DEFAULT,
     "sync_interval_min": st.SYNC_INTERVAL_DEFAULT,
+    "record_every_n": st.RECORD_EVERY_N_DEFAULT,
     "clases_activas": dict(CLASES_DEFAULT),
     "line": None,               # {"x1":..,"y1":..,"x2":..,"y2":..} norm o None
     "line_persistent": True,    # False = la línea vive solo esta sesión

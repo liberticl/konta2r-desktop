@@ -82,6 +82,7 @@ class App:
         self.lbl_net = None
         self.frame, self.disp_boxes = None, []
         self.recording, self.writer = False, None
+        self._rec_count = 0
         self._ui_thread = threading.get_ident()
         self._build_ui()
         self._load_model_async()
@@ -278,7 +279,10 @@ class App:
             self.disp_boxes = boxes
             if self.recording and self.writer is not None:
                 try:
-                    self.writer.write(self._overlay(frame.copy()))
+                    self._rec_count += 1
+                    every = max(1, int(self.cfg.get("record_every_n", st_mod.RECORD_EVERY_N_DEFAULT)))
+                    if self._rec_count % every == 0:
+                        self.writer.write(self._overlay(frame.copy()))
                 except Exception:  # noqa: BLE001
                     pass
 
@@ -651,11 +655,14 @@ class App:
         if not self.recording:
             fourcc = cv2.VideoWriter_fourcc(*st_mod.RECORD_FOURCC)
             path = self._media_path("grabacion_konta2r", "mp4")
+            every = max(1, int(self.cfg.get("record_every_n", st_mod.RECORD_EVERY_N_DEFAULT)))
+            fps = st_mod.RECORD_FPS / every  # duración 1:1 aunque se salten frames
+            self._rec_count = 0
             h, w = (self.frame.shape[:2] if self.frame is not None
                     else (st_mod.CAMERA_HEIGHT_DEFAULT, st_mod.CAMERA_WIDTH_DEFAULT))
-            self.writer = cv2.VideoWriter(path, fourcc, st_mod.RECORD_FPS, (w, h))
+            self.writer = cv2.VideoWriter(path, fourcc, fps, (w, h))
             self.recording = True
-            self._status(f"grabando: {path}")
+            self._toast(f"Grabando 1 de cada {every} (~/konta2r)")
         else:
             self.recording = False
             try:
@@ -723,6 +730,7 @@ class App:
         row_slider("Confianza", "conf_threshold", st_mod.CONF_MIN, st_mod.CONF_MAX)
         row_slider("Sync minutos", "sync_interval_min", 1, 60)
         row_slider("Modelo (320/640)", "model_size", st_mod.MODEL_SIZES[0], st_mod.MODEL_SIZES[1])
+        row_slider("Grabar 1 de cada N frames", "record_every_n", 1, st_mod.RECORD_EVERY_N_MAX)
         ctk.CTkLabel(scroll, text="Clases activas").pack(pady=(8, 0))
         self._cls_vars = {}
         for k in KEYS:
@@ -898,6 +906,7 @@ class App:
             new_size = st_mod.MODEL_SIZES[1] if ms >= st_mod.MODEL_SWITCH_THRESHOLD else st_mod.MODEL_SIZES[0]
             old_name = (self.cfg.get("device_name") or "")
             self.cfg["model_size"] = new_size
+            self.cfg["record_every_n"] = min(max(1, int(self.cfg.get("record_every_n", st_mod.RECORD_EVERY_N_DEFAULT))), st_mod.RECORD_EVERY_N_MAX)
             self.cfg["device_name"] = e_name.get().strip()[:st_mod.DEVICE_NAME_MAX]
             self.cfg["coords"] = e_coords.get().strip()
             self.cfg["side_a"] = e_side_a.get().strip()[:st_mod.SIDE_NAME_MAX]

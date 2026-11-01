@@ -32,6 +32,8 @@ DISPLAY_W_DEFAULT = 760
 DISPLAY_H_DEFAULT = 520
 RECORD_FOURCC = "mp4v"
 RECORD_FPS = 20.0
+RECORD_EVERY_N_DEFAULT = 1  # grabar 1 de cada N frames
+RECORD_EVERY_N_MAX = 10
 
 # ---- Modelo / inferencia ----
 MODEL_SIZES = (320, 640)
