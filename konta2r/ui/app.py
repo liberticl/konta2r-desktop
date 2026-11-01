@@ -27,12 +27,12 @@ from konta2r import export_csv as csv_mod
 from konta2r import geocode as geocode_mod
 from konta2r import debug as dbg_mod
 from konta2r import platform as pf_mod
+from konta2r import settings as st_mod
 from konta2r.capture import Camera, enumerate_cameras, list_cameras, camera_label, label_to_index
 
-KEYS = ("person", "bicycle", "skater", "car", "motorcycle", "bus", "truck", "pet")
-LABELS = {"person": "Peatones", "bicycle": "Bicis", "skater": "Patinetas",
-          "car": "Autos", "motorcycle": "Motos", "bus": "Buses",
-          "truck": "Camiones", "pet": "Mascotas"}
+# Única definición en settings.py (aquí solo alias cortos).
+KEYS = st_mod.CLASS_KEYS
+LABELS = st_mod.CLASS_LABELS
 
 
 def require_gui():
@@ -42,12 +42,6 @@ def require_gui():
     if pf_mod.is_headless():
         raise RuntimeError("Sin pantalla (headless). Usa una sesión con "
                            "escritorio o X-forwarding, o el modo sin GUI.")
-
-
-def hex_to_bgr(h: str):
-    h = h.lstrip("#")
-    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-    return (b, g, r)
 
 
 class App:
@@ -61,18 +55,18 @@ class App:
         self.tracker = tracker_mod.Tracker()
         self.counts = {k: 0 for k in KEYS}
         self.dir_counts = {k: {"A->B": 0, "B->A": 0, "": 0} for k in KEYS}
-        self.session_id = ("sesion_" + datetime.datetime.now().isoformat()
+        self.session_id = (st_mod.SESSION_PREFIX + datetime.datetime.now().isoformat()
                            .replace(":", "-").replace(".", "-"))
         self.cam = Camera(self.cfg.get("camera_index", 0),
-                          self.cfg.get("width", 1280), self.cfg.get("height", 720))
+                          self.cfg.get("width", st_mod.CAMERA_WIDTH_DEFAULT), self.cfg.get("height", st_mod.CAMERA_HEIGHT_DEFAULT))
         self.sess = None
-        self.model_size = int(self.cfg.get("model_size", 320))
+        self.model_size = int(self.cfg.get("model_size", st_mod.MODEL_DEFAULT))
         self.running, self.line_mode = False, False
         self.measuring = False
         self.sync_client = None
         self._session_line = None  # línea no persistente (solo memoria)
         self.debug_localhost = False  # solo sesión, no persistente, default off
-        self.debug_port = "8000"  # solo sesión; "" = sin puerto
+        self.debug_port = st_mod.DEBUG_PORT_DEFAULT  # solo sesión; "" = sin puerto
         self.btn_measure = None
         self.lbl_measure = None
         self._term_win = None
@@ -84,7 +78,7 @@ class App:
         self._status_pending_cam = None
         self.cam_var = None
         self.cam_menu = None
-        self.disp_w, self.disp_h = 760, 520  # se ajusta al canvas real
+        self.disp_w, self.disp_h = st_mod.DISPLAY_W_DEFAULT, st_mod.DISPLAY_H_DEFAULT  # se ajusta al canvas real
         self.lbl_net = None
         self.frame, self.disp_boxes = None, []
         self.recording, self.writer = False, None
@@ -243,7 +237,7 @@ class App:
         self._render_schedule()
 
     def _loop(self):
-        conf = float(self.cfg.get("conf_threshold", 0.50))
+        conf = float(self.cfg.get("conf_threshold", st_mod.CONF_DEFAULT))
         while self.running:
             ok, frame = self.cam.read()
             if not ok or frame is None:
@@ -333,8 +327,8 @@ class App:
                 date=now.strftime("%d-%m-%Y"), time=now.strftime("%H:%M:%S"),
                 detected=track.get("label", ""), detected_key=key,
                 model_class=track.get("modelClass", ""), direction=direction or "",
-                side_a=(self.cfg.get("side_a") or "")[:100],
-                side_b=(self.cfg.get("side_b") or "")[:100],
+                side_a=(self.cfg.get("side_a") or "")[:st_mod.SIDE_NAME_MAX],
+                side_b=(self.cfg.get("side_b") or "")[:st_mod.SIDE_NAME_MAX],
                 lat=lat, lon=lon, acc="")
         except Exception:  # noqa: BLE001
             pass
@@ -490,7 +484,7 @@ class App:
         except Exception:  # noqa: BLE001
             pass
         time.sleep(0.15)
-        self.cam = Camera(idx, self.cfg.get("width", 1280), self.cfg.get("height", 720))
+        self.cam = Camera(idx, self.cfg.get("width", st_mod.CAMERA_WIDTH_DEFAULT), self.cfg.get("height", st_mod.CAMERA_HEIGHT_DEFAULT))
         self.cfg["camera_index"] = idx
         config_store.save(self.cfg)
         self.tracker.reset()
@@ -527,14 +521,14 @@ class App:
         port = (getattr(self, "debug_port", "") or "").strip()
         if port:
             if not port.isdigit() or not (1 <= int(port) <= 65535):
-                return "http://localhost:8000"
-            return f"http://localhost:{int(port)}"
-        return "http://localhost"
+                return f"{st_mod.DEBUG_HOST}:{st_mod.DEBUG_PORT_DEFAULT}"
+            return f"{st_mod.DEBUG_HOST}:{int(port)}"
+        return st_mod.DEBUG_HOST
 
     def _effective_api(self) -> str:
         if getattr(self, "debug_localhost", False):
             return self._debug_url()
-        return (self.cfg.get("api_base") or "https://andeschileong.cl").rstrip("/")
+        return (self.cfg.get("api_base") or st_mod.API_BASE_DEFAULT).rstrip("/")
 
     def _ensure_sync_client(self):
         api = self._effective_api()
@@ -584,7 +578,7 @@ class App:
             if not self.running:
                 return
         # sesión nueva + contadores en cero
-        self.session_id = ("sesion_" + datetime.datetime.now().isoformat()
+        self.session_id = (st_mod.SESSION_PREFIX + datetime.datetime.now().isoformat()
                            .replace(":", "-").replace(".", "-"))
         self.tracker.reset()
         self.counts = {k: 0 for k in KEYS}
@@ -596,7 +590,7 @@ class App:
         self.measuring = True
         try:
             cl = self._ensure_sync_client()
-            cl.schedule_periodic(float(self.cfg.get("sync_interval_min", 5)))
+            cl.schedule_periodic(float(self.cfg.get("sync_interval_min", st_mod.SYNC_INTERVAL_DEFAULT)))
             cl.flush()
         except Exception:  # noqa: BLE001
             pass
@@ -651,10 +645,11 @@ class App:
 
     def toggle_record(self):
         if not self.recording:
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            fourcc = cv2.VideoWriter_fourcc(*st_mod.RECORD_FOURCC)
             path = self._media_path("grabacion_konta2r", "mp4")
-            h, w = (self.frame.shape[:2] if self.frame is not None else (720, 1280))
-            self.writer = cv2.VideoWriter(path, fourcc, 20.0, (w, h))
+            h, w = (self.frame.shape[:2] if self.frame is not None
+                    else (st_mod.CAMERA_HEIGHT_DEFAULT, st_mod.CAMERA_WIDTH_DEFAULT))
+            self.writer = cv2.VideoWriter(path, fourcc, st_mod.RECORD_FPS, (w, h))
             self.recording = True
             self._status(f"grabando: {path}")
         else:
@@ -721,9 +716,9 @@ class App:
         ctk.CTkOptionMenu(scroll, variable=cam_var_cfg,
                           values=list(opts_cfg),
                           command=_cfg_cam).pack(fill="x", padx=12)
-        row_slider("Confianza", "conf_threshold", 0.1, 0.9)
+        row_slider("Confianza", "conf_threshold", st_mod.CONF_MIN, st_mod.CONF_MAX)
         row_slider("Sync minutos", "sync_interval_min", 1, 60)
-        row_slider("Modelo (320/640)", "model_size", 320, 640)
+        row_slider("Modelo (320/640)", "model_size", st_mod.MODEL_SIZES[0], st_mod.MODEL_SIZES[1])
         ctk.CTkLabel(scroll, text="Clases activas").pack(pady=(8, 0))
         self._cls_vars = {}
         for k in KEYS:
@@ -832,7 +827,7 @@ class App:
                 lbl_dbg.configure(text=f"ON → {self._debug_url()} (solo esta sesión)")
                 btn_dbg.configure(text="Desactivar debug", fg_color="orange")
             else:
-                lbl_dbg.configure(text=f"OFF → {(self.cfg.get('api_base') or 'https://andeschileong.cl')}")
+                lbl_dbg.configure(text=f"OFF → {(self.cfg.get('api_base') or st_mod.API_BASE_DEFAULT)}")
                 btn_dbg.configure(text="Activar debug → localhost", fg_color="gray")
         def _toggle_dbg():
             if self.debug_localhost:
@@ -895,14 +890,14 @@ class App:
         def _save():
             for k, v in self._cls_vars.items():
                 self.cfg["clases_activas"][k] = bool(v.get())
-            ms = int(self.cfg.get("model_size", 320))
-            new_size = 640 if ms >= 480 else 320
+            ms = int(self.cfg.get("model_size", st_mod.MODEL_DEFAULT))
+            new_size = st_mod.MODEL_SIZES[1] if ms >= st_mod.MODEL_SWITCH_THRESHOLD else st_mod.MODEL_SIZES[0]
             old_name = (self.cfg.get("device_name") or "")
             self.cfg["model_size"] = new_size
-            self.cfg["device_name"] = e_name.get().strip()[:200]
+            self.cfg["device_name"] = e_name.get().strip()[:st_mod.DEVICE_NAME_MAX]
             self.cfg["coords"] = e_coords.get().strip()
-            self.cfg["side_a"] = e_side_a.get().strip()[:100]
-            self.cfg["side_b"] = e_side_b.get().strip()[:100]
+            self.cfg["side_a"] = e_side_a.get().strip()[:st_mod.SIDE_NAME_MAX]
+            self.cfg["side_b"] = e_side_b.get().strip()[:st_mod.SIDE_NAME_MAX]
             new_persist = bool(var_persist.get())
             old_persist = bool(self.cfg.get("line_persistent", True))
             self.cfg["line_persistent"] = new_persist
@@ -1002,7 +997,7 @@ def main(argv=None):
     def _bg():
         # solo registro inicial; el envío periódico corre solo en medición
         try:
-            client = sync_mod.SyncClient(cfg.get("api_base", "https://andeschileong.cl"),
+            client = sync_mod.SyncClient(cfg.get("api_base", st_mod.API_BASE_DEFAULT),
                                          app.db, cfg, on_status=lambda ok, m: None)
             app.sync_client = client
             try:

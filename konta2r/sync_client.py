@@ -7,6 +7,7 @@ import urllib.parse
 import requests
 
 from konta2r import debug as dbg
+from konta2r import settings as st
 
 # interno tracker/store -> campo API
 KEY_TO_API = {
@@ -89,8 +90,8 @@ def totals_payload(totals: dict, when_iso: str | None = None,
             # si d>0 pero != total: se omite (línea redibujada/pendientes viejos)
         if clean["a_to_b"] or clean["b_to_a"]:
             payload["direction_counts"] = clean
-        a = (side_names or {}).get("a", "")[:100]
-        b = (side_names or {}).get("b", "")[:100]
+        a = (side_names or {}).get("a", "")[:st.SIDE_NAME_MAX]
+        b = (side_names or {}).get("b", "")[:st.SIDE_NAME_MAX]
         if a or b:
             payload["side_names"] = {"a": a, "b": b}
     return payload
@@ -98,7 +99,7 @@ def totals_payload(totals: dict, when_iso: str | None = None,
 
 class SyncClient:
     def __init__(self, api_base: str, store, cfg: dict,
-                 on_status=None, timeout: int = 15):
+                 on_status=None, timeout: int = st.API_TIMEOUT):
         self.api = api_base.rstrip("/")
         self.store = store
         self.cfg = cfg
@@ -116,15 +117,15 @@ class SyncClient:
         """Chequeo barato: TCP connect al host de la API (sin TLS/HTTP)."""
         try:
             u = urllib.parse.urlparse(self.api)
-            host = u.hostname or "andeschileong.cl"
+            host = u.hostname or st.API_HOST_FALLBACK
             port = u.port or (443 if u.scheme == "https" else 80)
-            with socket.create_connection((host, port), timeout=4):
+            with socket.create_connection((host, port), timeout=st.PROBE_TIMEOUT):
                 pass
             return True
         except OSError:
             return False
 
-    def start_watcher(self, interval: float = 20.0, on_change=None):
+    def start_watcher(self, interval: float = st.WATCHER_INTERVAL, on_change=None):
         """Detecta caída/reconexión con uso mínimo (1 hebra + 1 socket c/20s).
 
         Al reconectar dispara flush() solo. No genera errores: si no hay
@@ -178,7 +179,7 @@ class SyncClient:
 
     def online(self) -> bool:
         try:
-            requests.head(self.api + "/", timeout=5)
+            requests.head(self.api + "/", timeout=st.ONLINE_TIMEOUT)
             return True
         except requests.RequestException:
             return False
@@ -318,7 +319,7 @@ class SyncClient:
         def _tick():
             self.flush()
             self.schedule_periodic(interval_min)
-        t = threading.Timer(max(60.0, interval_min * 60), _tick)
+        t = threading.Timer(max(st.SYNC_MIN_INTERVAL_S, interval_min * 60), _tick)
         t.daemon = True
         self._timer = t
         t.start()

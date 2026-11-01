@@ -1,13 +1,13 @@
-"""Config persistente (ruta según SO vía platform)."""
+"""Config persistente (ruta y defaults desde settings)."""
 from __future__ import annotations
 import json
 import os
 from copy import deepcopy
 
-from konta2r import platform as pf
+from konta2r import settings as st
 
-APP_DIR = pf.config_dir()
-CONFIG_PATH = os.path.join(APP_DIR, "config.json")
+APP_DIR = st.CONFIG_DIR
+CONFIG_PATH = st.CONFIG_PATH
 
 CLASES_DEFAULT = {
     "person": True, "bicycle": True, "skater": True, "car": True,
@@ -16,11 +16,11 @@ CLASES_DEFAULT = {
 
 DEFAULTS = {
     "camera_index": 0,
-    "width": 1280,
-    "height": 720,
-    "model_size": 320,          # 320 | 640
-    "conf_threshold": 0.50,
-    "sync_interval_min": 5,
+    "width": st.CAMERA_WIDTH_DEFAULT,
+    "height": st.CAMERA_HEIGHT_DEFAULT,
+    "model_size": st.MODEL_DEFAULT,
+    "conf_threshold": st.CONF_DEFAULT,
+    "sync_interval_min": st.SYNC_INTERVAL_DEFAULT,
     "clases_activas": dict(CLASES_DEFAULT),
     "line": None,               # {"x1":..,"y1":..,"x2":..,"y2":..} norm o None
     "line_persistent": True,    # False = la línea vive solo esta sesión
@@ -28,7 +28,7 @@ DEFAULTS = {
     "side_b": "",               # nombre lado B (máx 100, ref)
     "device_name": "",
     "coords": "",               # "lat,lon"
-    "api_base": "https://andeschileong.cl",
+    "api_base": st.API_BASE_DEFAULT,
     "token": "",
     "fingerprint": "",
 }

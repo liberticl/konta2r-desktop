@@ -8,6 +8,7 @@ import re
 import subprocess
 
 from konta2r import platform as pf
+from konta2r import settings as st
 
 
 @contextlib.contextmanager
@@ -174,7 +175,8 @@ def enumerate_cameras(max_index: int = 10):
 
 
 class Camera:
-    def __init__(self, index: int = 0, width: int = 1280, height: int = 720):
+    def __init__(self, index: int = 0, width: int = st.CAMERA_WIDTH_DEFAULT,
+                 height: int = st.CAMERA_HEIGHT_DEFAULT):
         self.index = index
         self.width = width
         self.height = height

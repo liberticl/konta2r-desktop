@@ -3,10 +3,10 @@ from __future__ import annotations
 import os
 import sqlite3
 
-from konta2r import platform as pf
+from konta2r import settings as st
 
-APP_DIR = pf.config_dir()
-DB_PATH = os.path.join(APP_DIR, "queue.db")
+APP_DIR = st.CONFIG_DIR
+DB_PATH = st.DB_PATH
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS events(

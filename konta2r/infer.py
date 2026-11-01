@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import numpy as np
 
+from konta2r import settings as st
+
 # COCO 80 clases
 COCO = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck',
         'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench',
@@ -30,10 +32,10 @@ RULES = {
     36: ("skater", "patineta", "#ff6600", "skateboard"),
 }
 
-COUNT_KEYS = ("person", "bicycle", "skater", "car", "motorcycle", "bus", "truck", "pet")
+COUNT_KEYS = st.CLASS_KEYS  # alias histórico; usar settings.CLASS_KEYS
 
 
-def parse_output0(output: np.ndarray, conf: float = 0.50,
+def parse_output0(output: np.ndarray, conf: float = st.CONF_DEFAULT,
                   clases_activas: dict | None = None):
     """output: array plano o (300,6)/(1,300,6) con [x1,y1,x2,y2,score,classId].
 
@@ -76,10 +78,11 @@ class Session:
         return np.asarray(out[0])
 
 
-def default_model_path(size: int = 320) -> str:
+def default_model_path(size: int = st.MODEL_DEFAULT) -> str:
     base = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
     alt = os.path.join(os.path.dirname(__file__), "..", "models")
-    name = "yolo26n-320.onnx" if int(size) == 320 else "yolo26n.onnx"
+    name = (f"yolo26n-{st.MODEL_SIZES[0]}.onnx" if int(size) == st.MODEL_SIZES[0]
+            else f"yolo26n-{st.MODEL_SIZES[1]}.onnx")
     for cand in (os.path.join(base, name), os.path.join(alt, name), name):
         if os.path.exists(cand):
             return cand

@@ -13,6 +13,9 @@ import subprocess
 
 APP_NAME = "konta2r"
 
+# Tamaños de modelo ONNX disponibles (chico, grande).
+MODEL_SIZES = (320, 640)
+
 _OVERRIDE = os.environ.get("KONTA2R_PLATFORM", "auto").strip().lower()
 
 _SYSTEM = _plat.system()  # Linux | Windows | Darwin | ...
@@ -144,13 +147,13 @@ def infer_threads() -> int:
 
 
 def default_model_size() -> int:
-    """Solo para instalaciones nuevas: Pi o poca RAM -> 320."""
+    """Solo para instalaciones nuevas: Pi o poca RAM -> chico."""
     if is_raspberry_pi():
-        return 320
+        return MODEL_SIZES[0]
     ram = total_ram_gb()
     if ram is not None and ram <= 2.0:
-        return 320
-    return 640
+        return MODEL_SIZES[0]
+    return MODEL_SIZES[1]
 
 
 def is_headless() -> bool:
