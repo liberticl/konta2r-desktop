@@ -1,11 +1,73 @@
 """Captura con camara local (nombres y backend según SO vía platform)."""
 from __future__ import annotations
+import contextlib
 import cv2
+import glob as _glob
 import os
 import re
 import subprocess
 
 from konta2r import platform as pf
+
+
+@contextlib.contextmanager
+def _quiet_opencv():
+    """Silencia los WARN/ERROR de sondeo (índices sin cámara)."""
+    lvl = None
+    prev = None
+    try:
+        lvl = cv2.utils.logging
+        prev = lvl.getLogLevel()
+        lvl.setLogLevel(lvl.LOG_LEVEL_SILENT)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        yield
+    finally:
+        try:
+            if lvl is not None:
+                lvl.setLogLevel(prev)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+@contextlib.contextmanager
+def _quiet_stdio():
+    """Silencia stderr a nivel fd (ruido C del driver, ej. ioctl V4L2)."""
+    try:
+        devnull = open(os.devnull, "w")
+        err = os.dup(2)
+    except OSError:
+        yield
+        return
+    try:
+        os.dup2(devnull.fileno(), 2)
+        yield
+    finally:
+        try:
+            os.dup2(err, 2)
+        finally:
+            try:
+                os.close(err)
+            except OSError:
+                pass
+            devnull.close()
+
+
+def _sysfs_video_indices() -> list[int] | None:
+    """Nodos /dev/video existentes (solo Linux). None si no hay sysfs."""
+    if pf.camera_name_strategy() != "v4l2":
+        return None
+    try:
+        idx = []
+        for p in _glob.glob("/sys/class/video4linux/video*"):
+            try:
+                idx.append(int(p.rsplit("video", 1)[1]))
+            except ValueError:
+                continue
+        return sorted(idx)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _v4l2_names() -> dict[int, str]:
@@ -71,9 +133,12 @@ def list_cameras(max_index: int | None = None) -> list[tuple[int, str]]:
         max_index = pf.camera_probe_max()
     backend = pf.camera_backend()
     sys_names = _friendly_names()
+    existing = _sysfs_video_indices()
+    indices = existing if existing is not None else list(range(max_index))
     candidates: list[tuple[int, str]] = []
-    for i in range(max_index):
-        cap = cv2.VideoCapture(i, backend) if backend is not None else cv2.VideoCapture(i)
+    with _quiet_opencv(), _quiet_stdio():
+        for i in indices:
+            cap = cv2.VideoCapture(i, backend) if backend is not None else cv2.VideoCapture(i)
         ok = cap.isOpened()
         cap.release()
         if ok:
