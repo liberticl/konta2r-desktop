@@ -83,6 +83,7 @@ class App:
         self.frame, self.disp_boxes = None, []
         self.recording, self.writer = False, None
         self._rec_count = 0
+        self._loop_fps = 0.0  # EMA del loop real; base del fps de grabación
         self._ui_thread = threading.get_ident()
         self._build_ui()
         self._load_model_async()
@@ -244,6 +245,7 @@ class App:
     def _loop(self):
         conf = float(self.cfg.get("conf_threshold", st_mod.CONF_DEFAULT))
         while self.running:
+            t0 = time.monotonic()
             ok, frame = self.cam.read()
             if not ok or frame is None:
                 time.sleep(0.05)
@@ -277,6 +279,10 @@ class App:
                 if self.tracker.tracks:
                     self.tracker.reset()
             self.disp_boxes = boxes
+            dt = time.monotonic() - t0
+            if dt > 0:
+                inst = 1.0 / dt
+                self._loop_fps = inst if self._loop_fps <= 0 else 0.9 * self._loop_fps + 0.1 * inst
             if self.recording and self.writer is not None:
                 try:
                     self._rec_count += 1
@@ -656,13 +662,14 @@ class App:
             fourcc = cv2.VideoWriter_fourcc(*st_mod.RECORD_FOURCC)
             path = self._media_path("grabacion_konta2r", "mp4")
             every = max(1, int(self.cfg.get("record_every_n", st_mod.RECORD_EVERY_N_DEFAULT)))
-            fps = st_mod.RECORD_FPS / every  # duración 1:1 aunque se salten frames
+            base = self._loop_fps if self._loop_fps > 0.5 else st_mod.RECORD_FPS
+            fps = min(60.0, max(1.0, base / every))  # 1:1 con la velocidad real
             self._rec_count = 0
             h, w = (self.frame.shape[:2] if self.frame is not None
                     else (st_mod.CAMERA_HEIGHT_DEFAULT, st_mod.CAMERA_WIDTH_DEFAULT))
             self.writer = cv2.VideoWriter(path, fourcc, fps, (w, h))
             self.recording = True
-            self._toast(f"Grabando 1 de cada {every} (~/konta2r)")
+            self._toast(f"Grabando 1 de cada {every} a {fps:.1f} fps (~/konta2r)")
         else:
             self.recording = False
             try:
