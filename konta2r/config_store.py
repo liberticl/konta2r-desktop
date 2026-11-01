@@ -1,10 +1,12 @@
-"""Config persistente en ~/.config/konta2r/config.json."""
+"""Config persistente (ruta según SO vía platform)."""
 from __future__ import annotations
 import json
 import os
 from copy import deepcopy
 
-APP_DIR = os.path.join(os.path.expanduser("~"), ".config", "konta2r")
+from konta2r import platform as pf
+
+APP_DIR = pf.config_dir()
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 
 CLASES_DEFAULT = {

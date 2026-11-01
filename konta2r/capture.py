@@ -1,29 +1,43 @@
-"""Captura con camara local (sin URL/HLS/archivo)."""
+"""Captura con camara local (nombres y backend según SO vía platform)."""
 from __future__ import annotations
 import cv2
 import os
 import re
 import subprocess
 
+from konta2r import platform as pf
 
-def _friendly_names() -> dict[int, str]:
-    """Índice -> nombre amigable. v4l2-ctl, luego sysfs, si no 'Cámara N'."""
+
+def _v4l2_names() -> dict[int, str]:
+    """v4l2-ctl --list-devices (solo Linux). {} si no existe/falla."""
     names: dict[int, str] = {}
+    if pf.camera_name_strategy() != "v4l2":
+        return names
     try:
         out = subprocess.run(["v4l2-ctl", "--list-devices"],
                              capture_output=True, text=True, timeout=5).stdout
-        cur = ""
-        for line in out.splitlines():
-            if line and not line.startswith(("\t", " ")):
-                cur = line.strip().rstrip(":").split("(")[0].strip() or cur
-            m = re.search(r"/dev/video(\d+)", line)
-            if m:
-                idx = int(m.group(1))
-                if idx not in names and cur:
-                    names[idx] = cur
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:  # noqa: BLE001  (incluye FileNotFoundError en Win)
+        return names
+    cur = ""
+    for line in out.splitlines():
+        if line and not line.startswith(("\t", " ")):
+            cur = line.strip().rstrip(":").split("(")[0].strip() or cur
+        m = re.search(r"/dev/video(\d+)", line)
+        if m:
+            idx = int(m.group(1))
+            if idx not in names and cur:
+                names[idx] = cur
     return names
+
+
+def _friendly_names() -> dict[int, str]:
+    """Nombres según estrategia de la plataforma (v4l2/dshow/genérico)."""
+    strategy = pf.camera_name_strategy()
+    if strategy == "v4l2":
+        return _v4l2_names()
+    if strategy == "dshow":
+        return pf.dshow_device_names()
+    return {}
 
 
 def _sysfs_name(i: int) -> str:
@@ -35,7 +49,7 @@ def _sysfs_name(i: int) -> str:
 
 
 def _device_key(i: int, name: str) -> str | None:
-    """Agrupa nodos del mismo físico (video + metadata comparten device)."""
+    """Agrupa nodos asociados a la misma cámara (video + metadata comparten device)."""
     if "metadata" in (name or "").lower():
         return f"meta:{i}"
     try:
@@ -47,16 +61,19 @@ def _device_key(i: int, name: str) -> str | None:
     return None
 
 
-def list_cameras(max_index: int = 10) -> list[tuple[int, str]]:
+def list_cameras(max_index: int | None = None) -> list[tuple[int, str]]:
     """Solo disponibles, UNA entrada por cámara física.
 
     Cada cámara suele exponer 2 nodos /dev/video (captura + metadata)
     con el mismo nombre; se conserva solo el primero de cada grupo.
     """
+    if max_index is None:
+        max_index = pf.camera_probe_max()
+    backend = pf.camera_backend()
     sys_names = _friendly_names()
     candidates: list[tuple[int, str]] = []
     for i in range(max_index):
-        cap = cv2.VideoCapture(i)
+        cap = cv2.VideoCapture(i, backend) if backend is not None else cv2.VideoCapture(i)
         ok = cap.isOpened()
         cap.release()
         if ok:
@@ -97,10 +114,14 @@ class Camera:
         self.width = width
         self.height = height
         self.cap = None
+        self.backend = pf.camera_backend()
 
     def open(self) -> bool:
         self.close()
-        self.cap = cv2.VideoCapture(self.index)
+        if self.backend is not None:
+            self.cap = cv2.VideoCapture(self.index, self.backend)
+        else:
+            self.cap = cv2.VideoCapture(self.index)
         if not self.cap.isOpened():
             return False
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)

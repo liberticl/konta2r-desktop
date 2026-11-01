@@ -65,7 +65,8 @@ class Session:
         if not os.path.exists(model_path):
             raise FileNotFoundError(model_path)
         opts = ort.SessionOptions()
-        opts.intra_op_num_threads = max(1, (os.cpu_count() or 4) - 1)
+        from konta2r import platform as pf
+        opts.intra_op_num_threads = pf.infer_threads()
         self.sess = ort.InferenceSession(model_path, sess_options=opts,
                                          providers=["CPUExecutionProvider"])
         self.input_name = self.sess.get_inputs()[0].name

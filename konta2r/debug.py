@@ -4,7 +4,9 @@ import collections
 import datetime
 import os
 
-APP_DIR = os.path.join(os.path.expanduser("~"), ".config", "konta2r")
+from konta2r import platform as pf
+
+APP_DIR = pf.config_dir()
 LOG_PATH = os.path.join(APP_DIR, "debug.log")
 
 _buf: collections.deque[str] = collections.deque(maxlen=500)

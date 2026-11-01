@@ -3,7 +3,9 @@ from __future__ import annotations
 import os
 import sqlite3
 
-APP_DIR = os.path.join(os.path.expanduser("~"), ".config", "konta2r")
+from konta2r import platform as pf
+
+APP_DIR = pf.config_dir()
 DB_PATH = os.path.join(APP_DIR, "queue.db")
 
 SCHEMA = """

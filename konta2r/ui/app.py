@@ -26,6 +26,7 @@ from konta2r import sync_client as sync_mod
 from konta2r import export_csv as csv_mod
 from konta2r import geocode as geocode_mod
 from konta2r import debug as dbg_mod
+from konta2r import platform as pf_mod
 from konta2r.capture import Camera, enumerate_cameras, list_cameras, camera_label, label_to_index
 
 KEYS = ("person", "bicycle", "skater", "car", "motorcycle", "bus", "truck", "pet")
@@ -37,7 +38,10 @@ LABELS = {"person": "Peatones", "bicycle": "Bicis", "skater": "Patinetas",
 def require_gui():
     if _IMPORT_ERR is not None or ctk is None:
         raise RuntimeError(f"GUI no disponible: {_IMPORT_ERR}. "
-                           "Instala requirements: pip install -r requirements.txt")
+                           f"{pf_mod.tk_install_hint()}")
+    if pf_mod.is_headless():
+        raise RuntimeError("Sin pantalla (headless). Usa una sesión con "
+                           "escritorio o X-forwarding, o el modo sin GUI.")
 
 
 def hex_to_bgr(h: str):
@@ -50,6 +54,9 @@ class App:
     def __init__(self):
         require_gui()
         self.cfg = config_store.load()
+        if not os.path.exists(config_store.CONFIG_PATH):
+            # primera ejecución: modelo según plataforma/RAM
+            self.cfg["model_size"] = pf_mod.default_model_size()
         self.db = store_mod.Store()
         self.tracker = tracker_mod.Tracker()
         self.counts = {k: 0 for k in KEYS}
@@ -81,6 +88,7 @@ class App:
         self.lbl_net = None
         self.frame, self.disp_boxes = None, []
         self.recording, self.writer = False, None
+        self._ui_thread = threading.get_ident()
         self._build_ui()
         self._load_model_async()
 
@@ -168,20 +176,33 @@ class App:
                 self._toast(f"Error modelo: {exc}")
         threading.Thread(target=_t, daemon=True).start()
 
+    def _ui_after(self, fn):
+        """Ejecuta fn en el hilo de Tk (los timers/watcher corren en otros)."""
+        try:
+            if threading.get_ident() == self._ui_thread:
+                fn()
+            else:
+                self.root.after(0, fn)
+        except Exception:
+            pass
+
     def _status(self, msg):
         # Sin barra superior: todo va al debug.log + terminal en vivo.
         try:
             dbg_mod.log(msg)
         except Exception:
             pass
-        try:
-            if getattr(self, "_term_text", None) is not None:
-                self._term_text.configure(state="normal")
-                self._term_text.insert("end", f"{msg}\n")
-                self._term_text.see("end")
-                self._term_text.configure(state="disabled")
-        except Exception:
-            pass
+
+        def _show():
+            try:
+                if getattr(self, "_term_text", None) is not None:
+                    self._term_text.configure(state="normal")
+                    self._term_text.insert("end", f"{msg}\n")
+                    self._term_text.see("end")
+                    self._term_text.configure(state="disabled")
+            except Exception:
+                pass
+        self._ui_after(_show)
 
     def _toast(self, msg, ms: int = 2500):
         """Notificación push in-app: popup que se autocierra."""
@@ -387,6 +408,11 @@ class App:
                     if nm:
                         self.canvas.create_text(px, py + 36, text=nm, fill="white",
                                                 font=("Arial", 11))
+
+    def _media_path(self, prefix: str, ext: str) -> str:
+        d = pf_mod.media_dir()
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, f"{prefix}_{int(time.time())}.{ext}")
 
     def _overlay(self, frame):
         h, w = frame.shape[:2]
@@ -626,8 +652,7 @@ class App:
     def toggle_record(self):
         if not self.recording:
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            path = os.path.join(os.path.expanduser("~"),
-                                f"grabacion_konta2r_{int(time.time())}.mp4")
+            path = self._media_path("grabacion_konta2r", "mp4")
             h, w = (self.frame.shape[:2] if self.frame is not None else (720, 1280))
             self.writer = cv2.VideoWriter(path, fourcc, 20.0, (w, h))
             self.recording = True
@@ -644,16 +669,16 @@ class App:
     def save_photo(self):
         if self.frame is None:
             return
-        path = os.path.join(os.path.expanduser("~"),
-                            f"foto_konta2r_{int(time.time())}.png")
+        path = self._media_path("foto_konta2r", "png")
         cv2.imwrite(path, self.frame)
-        self._status(f"foto: {path}")
+        self._toast(f"Foto: {path}")
 
     def save_csv(self):
-        path = os.path.join(os.path.expanduser("~"),
+        path = os.path.join(pf_mod.media_dir(),
                             f"detecciones_{datetime.date.today()}.csv")
+        os.makedirs(pf_mod.media_dir(), exist_ok=True)
         csv_mod.export_events_to_csv(self.db.all_events(), path)
-        self._status(f"CSV: {path}")
+        self._toast(f"CSV: {path}")
 
     def open_config(self):
         win = ctk.CTkToplevel(self.root)
@@ -964,7 +989,7 @@ class App:
 def main(argv=None):
     require_gui()
     try:
-        dbg_mod.log("konta2r-desktop inicio (sync: 1 POST por evento, datetime=creación real)")
+        dbg_mod.log(f"konta2r-desktop inicio ({pf_mod.describe()})")
     except Exception:
         pass
     app = App()
