@@ -99,10 +99,10 @@ class App:
         self._loop_fps = 0.0  # EMA del loop real; base del fps de grabación
         self._ui_thread = threading.get_ident()
         self._build_ui()
+        self._load_model_async()
 
     def tr(self, key: str, **kw) -> str:
         return lng.t(key, self.lang, **kw)
-        self._load_model_async()
 
     # ---- UI ----
     def _build_ui(self):
