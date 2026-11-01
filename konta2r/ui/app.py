@@ -149,7 +149,7 @@ class App:
         self.cam_var.set(cur_label)
         self.cam_menu = ctk.CTkOptionMenu(
             side, variable=self.cam_var,
-            values=list(self.cam_options) or ["0 · sin cámaras"],
+            values=list(self.cam_options) or [f"0 · {self.tr('no_cameras')}"],
             command=self._switch_camera)
         self.cam_menu.pack(fill="x", pady=(0, 4))
         ctk.CTkButton(side, text=self.tr("reload_cameras"),
@@ -498,7 +498,7 @@ class App:
         self.cam_options = {camera_label(i, nm): i for i, nm in cams}
         self.avail_cams = [i for i, _ in cams]
         if not self.cam_options:
-            self.cam_menu.configure(values=["sin cámaras"])
+            self.cam_menu.configure(values=[self.tr("no_cameras")])
             self._status(self.tr("cam_none"))
             self.running = False
             return
@@ -698,9 +698,11 @@ class App:
                     else (st_mod.CAMERA_HEIGHT_DEFAULT, st_mod.CAMERA_WIDTH_DEFAULT))
             self.writer = cv2.VideoWriter(path, fourcc, fps, (w, h))
             self.recording = True
-            self._toast(self.tr("record_toast", every=every, fps=f"{fps:.1f}"))
+            self._toast(self.tr("start_record_toast", every=every, fps=f"{fps:.1f}"))
+            self._status(self.tr("record_started"))
         else:
             self.recording = False
+            self._toast(self.tr("stop_record_toast"))
             try:
                 self.writer.release()
             except Exception:  # noqa: BLE001
@@ -744,7 +746,7 @@ class App:
         # selector de cámara en config: usa la lista ya conocida (no reabre
         # la cámara en uso; para detectar nuevas usa ↻ Recargar cámaras)
         ctk.CTkLabel(scroll, text=self.tr("camera_label")).pack()
-        opts_cfg = dict(self.cam_options) or {"sin cámaras": -1}
+        opts_cfg = dict(self.cam_options) or {self.tr("no_cameras"): -1}
         cur_cfg = next((lb for lb, ix in opts_cfg.items()
                         if ix == int(self.cfg.get("camera_index", 0))), next(iter(opts_cfg)))
         cam_var_cfg = ctk.StringVar(value=cur_cfg)
@@ -779,7 +781,7 @@ class App:
         e_name.pack(fill="x", padx=12)
         ctk.CTkLabel(scroll, text=self.tr("cfg_lang")).pack()
         lang_names = dict(lng.LANGS)
-        lang_var = ctk.StringVar(value=lang_names.get(self.lang, "Español"))
+        lang_var = ctk.StringVar(value=lang_names.get(self.lang, lang_names.get(lng.DEFAULT_LANG, "Español")))
         ctk.CTkOptionMenu(scroll, variable=lang_var,
                           values=list(lang_names.values()),
                           command=lambda _: None).pack(fill="x", padx=12)
@@ -852,8 +854,8 @@ class App:
         e_coords = ctk.CTkEntry(scroll)
         e_coords.insert(0, self.cfg.get("coords", ""))
         e_coords.pack(fill="x", padx=12)
-        ctk.CTkLabel(scroll, text=self.tr("geo_source"),
-                     text_color="gray").pack()
+        # ctk.CTkLabel(scroll, text=self.tr("geo_source"),
+        #              text_color="gray").pack()
         ctk.CTkLabel(scroll, text=self.tr("cfg_side_a")).pack()
         e_side_a = ctk.CTkEntry(scroll, placeholder_text=self.tr("cfg_side_a_ph"))
         e_side_a.insert(0, self.cfg.get("side_a", ""))

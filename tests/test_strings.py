@@ -33,13 +33,28 @@ def test_clases_en_tres_idiomas():
 
 def test_todo_tr_usado_existe():
     import pathlib
-    src = (pathlib.Path(__file__).resolve().parent.parent
-           / "konta2r" / "ui" / "app.py").read_text(encoding="utf-8")
+    root = pathlib.Path(__file__).resolve().parent.parent / "konta2r"
+    src = (root / "ui" / "app.py").read_text(encoding="utf-8")
+    src += (root / "sync_client.py").read_text(encoding="utf-8")
     usados = set(re.findall(r"self\.tr\(\"([^\"]+)\"|lng\.t\(\"([^\"]+)\"", src))
     usados = {a or b for a, b in usados}
-    assert usados, "no se encontró ningún self.tr() en la UI"
+    usados |= set(re.findall(r"self\._t\(\"([^\"]+)\"", src))
+    assert usados, "no se encontró ningún self.tr()/self._t()"
     faltan = usados - set(lng.STRINGS)
     assert not faltan, f"claves usadas sin definir: {faltan}"
+
+
+def test_sin_texto_duro_en_ui_y_sync():
+    """Frases ya centralizadas no pueden reaparecer hardcodeadas."""
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parent.parent / "konta2r"
+    prohibidas = ["sin cámaras", "registrado", "al dia", "sincronizado",
+                  "sin conexión — envío pausado", "re-registro falló",
+                  "modo linea", "Config guardada", "Código incorrecto"]
+    for rel in ("ui/app.py", "sync_client.py"):
+        src = (root / rel).read_text(encoding="utf-8")
+        for frase in prohibidas:
+            assert f'"{frase}' not in src, f"{rel} hardcodea: {frase}"
 
 
 def test_sin_hardcode_en_idioma_por_defecto():

@@ -8,6 +8,7 @@ import requests
 
 from konta2r import debug as dbg
 from konta2r import settings as st
+from konta2r import strings as lng
 
 # interno tracker/store -> campo API
 KEY_TO_API = {
@@ -113,6 +114,10 @@ class SyncClient:
         self._watch_stop = None
         self.on_change = None  # callback(bool online)
 
+    def _t(self, key: str, **kw) -> str:
+        lang = (self.cfg or {}).get("lang") or lng.DEFAULT_LANG
+        return lng.t(key, lang, **kw)
+
     def _probe(self) -> bool:
         """Chequeo barato: TCP connect al host de la API (sin TLS/HTTP)."""
         try:
@@ -146,15 +151,15 @@ class SyncClient:
                 if ok != self._online:
                     self._online = ok
                     if ok:
-                        dbg.log("red: reconexión detectada → enviando pendientes")
+                        dbg.log(self._t("net_up_log"))
                         try:
                             if self.on_change:
                                 self.on_change(True)
                             self.flush()
                         except Exception as exc:  # noqa: BLE001
-                            dbg.log(f"flush tras reconexión falló: {exc}")
+                            dbg.log(self._t("sync_retry_fail", exc=exc))
                     else:
-                        dbg.log("red: caída detectada → se pausa el envío (sin errores)")
+                        dbg.log(self._t("net_down_log"))
                         try:
                             if self.on_change:
                                 self.on_change(False)
@@ -196,7 +201,7 @@ class SyncClient:
         if data.get("device_name") and not self.cfg.get("device_name"):
             self.cfg["device_name"] = data["device_name"]
         dbg.log(f"API register OK device={data.get('device_name')} id={data.get('device_id')}")
-        self.on_status(True, "registrado")
+        self.on_status(True, self._t("sync_registered"))
         return data
 
     def rename(self, name: str):
@@ -243,11 +248,11 @@ class SyncClient:
         except AttributeError:
             events = []
         if not events:
-            self.on_status(True, "al dia")
+            self.on_status(True, self._t("sync_uptodate"))
             return True
         if self._online is False:
             # sin red (lo sabe el watcher): no se intenta, no hay error
-            self.on_status(False, "sin conexión — envío pausado")
+            self.on_status(False, self._t("sync_paused"))
             return False
         sent, failed = 0, 0
         for ev in events:
@@ -260,7 +265,7 @@ class SyncClient:
                 r = requests.post(self.api + "/api/trafico/", json=payload,
                                   headers=self._headers(), timeout=self.timeout)
                 if r.status_code in (401, 403):
-                    dbg.log(f"API POST {r.status_code}: token inválido, re-registrando")
+                    dbg.log(self._t("sync_unauthorized", code=r.status_code))
                     try:
                         from konta2r import fingerprint as fp_mod
                         self.register((self.cfg or {}).get("fingerprint", "")
@@ -270,18 +275,18 @@ class SyncClient:
                         r = requests.post(self.api + "/api/trafico/", json=payload,
                                           headers=self._headers(), timeout=self.timeout)
                     except Exception as exc2:  # noqa: BLE001
-                        dbg.log(f"re-registro falló: {exc2}")
+                        dbg.log(self._t("sync_reregister_fail", exc=exc2))
                         failed += 1
                         break
                     if r.status_code in (401, 403):
-                        dbg.log("API sigue 401/403 tras re-registro; se reintenta luego")
+                        dbg.log(self._t("sync_still_unauthorized"))
                         failed += 1
                         break
                 r.raise_for_status()
             except requests.RequestException as exc:
                 if getattr(exc, "response", None) is None:
                     # sin respuesta HTTP = sin red: lo marca el watcher, sin timer
-                    dbg.log(f"API sin red ({exc.__class__.__name__}): envío pausado")
+                    dbg.log(self._t("sync_offline_log", err=exc.__class__.__name__))
                     if self._online is not False:
                         self._online = False
                         try:
@@ -290,21 +295,21 @@ class SyncClient:
                         except Exception:  # noqa: BLE001
                             pass
                 else:
-                    dbg.log(f"API POST fallo: {exc.__class__.__name__}: {exc}")
+                    dbg.log(self._t("sync_http_fail", err=f"{exc.__class__.__name__}: {exc}"))
                 failed += 1
                 break
             self.store.mark_synced([ev["id"]])
             sent += 1
         if failed:
             if self._online is False:
-                self.on_status(False, "sin conexión — envío pausado")
+                self.on_status(False, self._t("sync_paused"))
                 # sin timer: el watcher reanuda solo al reconectar
             else:
-                self.on_status(False, f"pendientes: {failed} (enviados {sent})")
+                self.on_status(False, self._t("sync_partial", failed=failed, sent=sent))
                 self.schedule_retry()
             return False
-        dbg.log(f"API sincronizados: {sent}")
-        self.on_status(True, f"sincronizado ({sent})")
+        dbg.log(self._t("sync_done", sent=sent))
+        self.on_status(True, self._t("sync_done", sent=sent))
         return True
 
     def schedule_retry(self, interval_min: float = 1.0):
