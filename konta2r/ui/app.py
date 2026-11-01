@@ -120,15 +120,28 @@ class App:
         self.canvas.bind("<Configure>", self._on_canvas_resize)
         side = ctk.CTkScrollableFrame(body, width=280)
         side.pack(side="right", fill="y", padx=(6, 0))
-        self.lbl_measure = ctk.CTkLabel(side, text=self.tr("measure_idle"), text_color="gray")
+
+        def _section(title_key):
+            box = ctk.CTkFrame(side)
+            box.pack(fill="x", padx=2, pady=(0, 8))
+            ctk.CTkLabel(box, text=self.tr(title_key),
+                         font=("Arial", 12, "bold")).pack(anchor="w", padx=10, pady=(8, 2))
+            inner = ctk.CTkFrame(box, fg_color="transparent")
+            inner.pack(fill="x", padx=10, pady=(0, 10))
+            return inner
+
+        sec_measure = _section("sec_measure")
+        self.lbl_measure = ctk.CTkLabel(sec_measure, text=self.tr("measure_idle"), text_color="gray")
         self.lbl_measure.pack(anchor="w", pady=(0, 2))
-        self.btn_measure = ctk.CTkButton(side, text=self.tr("measure_start"),
-                                         fg_color="green", command=self.toggle_measure)
-        self.btn_measure.pack(fill="x", pady=(0, 4))
-        self.lbl_net = ctk.CTkLabel(side, text=self.tr("net_unknown"), text_color="gray")
-        self.lbl_net.pack(anchor="w", pady=(0, 6))
+        self.btn_measure = ctk.CTkButton(sec_measure, text=self.tr("measure_start"),
+                                         fg_color="green", command=self.toggle_measure,
+                                         height=36)
+        self.btn_measure.pack(fill="x", pady=(2, 4))
+        self.lbl_net = ctk.CTkLabel(sec_measure, text=self.tr("net_unknown"), text_color="gray")
+        self.lbl_net.pack(anchor="w", pady=(0, 2))
         # selector de cámara con nombre, solo disponibles
-        ctk.CTkLabel(side, text=self.tr("camera_label")).pack(anchor="w")
+        sec_cam = _section("sec_camera")
+        ctk.CTkLabel(sec_cam, text=self.tr("camera_label")).pack(anchor="w")
         self.cam_options: dict[str, int] = {}
         self.cam_var = ctk.StringVar(value="")
         try:
@@ -148,27 +161,31 @@ class App:
             self._status_pending_cam = None
         self.cam_var.set(cur_label)
         self.cam_menu = ctk.CTkOptionMenu(
-            side, variable=self.cam_var,
+            sec_cam, variable=self.cam_var,
             values=list(self.cam_options) or [f"0 · {self.tr('no_cameras')}"],
             command=self._switch_camera)
         self.cam_menu.pack(fill="x", pady=(0, 4))
-        ctk.CTkButton(side, text=self.tr("reload_cameras"),
-                      command=self._refresh_cameras).pack(fill="x", pady=(0, 6))
+        ctk.CTkButton(sec_cam, text=self.tr("reload_cameras"),
+                      command=self._refresh_cameras).pack(fill="x", pady=(4, 0))
+        sec_count = _section("sec_counts")
         self.count_labels = {}
         for k in KEYS:
-            row = ctk.CTkFrame(side)
+            row = ctk.CTkFrame(sec_count)
             row.pack(fill="x", pady=1)
             ctk.CTkLabel(row, text=self.labels[k], width=110).pack(side="left")
             lbl = ctk.CTkLabel(row, text="0", width=60)
             lbl.pack(side="left")
             self.count_labels[k] = lbl
+        sec_act = _section("sec_actions")
         for txt, cmd in [(self.tr("btn_record"), self.toggle_record),
                          (self.tr("btn_photo"), self.save_photo),
                          (self.tr("btn_csv"), self.save_csv),
-                         (self.tr("btn_line"), self.toggle_line),
-                         (self.tr("btn_config"), self.open_config),
+                         (self.tr("btn_line"), self.toggle_line)]:
+            ctk.CTkButton(sec_act, text=txt, command=cmd).pack(fill="x", pady=2)
+        sec_cfg = _section("sec_settings")
+        for txt, cmd in [(self.tr("btn_config"), self.open_config),
                          (self.tr("btn_terminal"), self.toggle_terminal)]:
-            ctk.CTkButton(side, text=txt, command=cmd).pack(fill="x", pady=2)
+            ctk.CTkButton(sec_cfg, text=txt, command=cmd).pack(fill="x", pady=2)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
     # ---- modelo ----
@@ -732,20 +749,44 @@ class App:
         scroll = ctk.CTkScrollableFrame(win)
         scroll.pack(fill="both", expand=True, padx=8, pady=8)
 
-        def row_slider(label, key, lo, hi, fmt="{}"):
-            ctk.CTkLabel(scroll, text=label).pack()
+        def _card(title_key):
+            box = ctk.CTkFrame(scroll)
+            box.pack(fill="x", padx=4, pady=6)
+            ctk.CTkLabel(box, text=self.tr(title_key),
+                         font=("Arial", 13, "bold")).pack(anchor="w", padx=10, pady=(8, 2))
+            inner = ctk.CTkFrame(box, fg_color="transparent")
+            inner.pack(fill="x", padx=10, pady=(0, 10))
+            return inner
+
+        sec_device = _card("cfg_sec_device")
+        ctk.CTkLabel(sec_device, text=self.tr("cfg_device")).pack()
+        e_name = ctk.CTkEntry(sec_device)
+        e_name.insert(0, self.cfg.get("device_name", ""))
+        e_name.pack(fill="x", padx=12)
+        ctk.CTkLabel(sec_device, text=self.tr("cfg_lang")).pack()
+        lang_names = dict(lng.LANGS)
+        lang_var = ctk.StringVar(value=lang_names.get(self.lang, lang_names.get(lng.DEFAULT_LANG, list(lang_names.values())[0])))
+        ctk.CTkOptionMenu(sec_device, variable=lang_var,
+                          values=list(lang_names.values()),
+                          command=lambda _: None).pack(fill="x", padx=12)
+        self._lang_var = lang_var
+        self._lang_names = lang_names
+        sec_capture = _card("cfg_sec_capture")
+
+        def row_slider(label, key, lo, hi, parent, fmt="{}"):
+            ctk.CTkLabel(parent, text=label).pack(anchor="w")
             var = ctk.DoubleVar(value=float(self.cfg.get(key, lo)))
-            lbl = ctk.CTkLabel(scroll, text=fmt.format(var.get()))
-            lbl.pack()
+            val = ctk.CTkLabel(parent, text=fmt.format(var.get()))
+            val.pack(anchor="w")
 
             def _cb(v):
                 self.cfg[key] = round(float(v), 2) if isinstance(self.cfg.get(key), float) else int(float(v))
-                lbl.configure(text=fmt.format(self.cfg[key]))
-            ctk.CTkSlider(scroll, from_=lo, to=hi, variable=var,
-                          command=_cb).pack(fill="x", padx=12)
+                val.configure(text=fmt.format(self.cfg[key]))
+            ctk.CTkSlider(parent, from_=lo, to=hi, variable=var,
+                          command=_cb).pack(fill="x", pady=(0, 6))
         # selector de cámara en config: usa la lista ya conocida (no reabre
         # la cámara en uso; para detectar nuevas usa ↻ Recargar cámaras)
-        ctk.CTkLabel(scroll, text=self.tr("camera_label")).pack()
+        ctk.CTkLabel(sec_capture, text=self.tr("camera_label")).pack(anchor="w")
         opts_cfg = dict(self.cam_options) or {self.tr("no_cameras"): -1}
         cur_cfg = next((lb for lb, ix in opts_cfg.items()
                         if ix == int(self.cfg.get("camera_index", 0))), next(iter(opts_cfg)))
@@ -759,39 +800,30 @@ class App:
                 self.cam_var.set(choice)
             except Exception:  # noqa: BLE001
                 pass
-        self._cfg_cam_menu = ctk.CTkOptionMenu(scroll, variable=cam_var_cfg,
+        self._cfg_cam_menu = ctk.CTkOptionMenu(sec_capture, variable=cam_var_cfg,
                           values=list(opts_cfg),
                           command=_cfg_cam)
         self._cfg_cam_menu.pack(fill="x", padx=12)
-        ctk.CTkButton(scroll, text=self.tr("reload_cameras"),
-                      command=self._refresh_cameras).pack(fill="x", padx=12, pady=(0, 4))
-        row_slider(self.tr("cfg_confidence"), "conf_threshold", st_mod.CONF_MIN, st_mod.CONF_MAX)
-        row_slider(self.tr("cfg_sync"), "sync_interval_min", 1, 60)
-        row_slider(self.tr("cfg_model"), "model_size", st_mod.MODEL_SIZES[0], st_mod.MODEL_SIZES[1])
-        row_slider(self.tr("cfg_record_n"), "record_every_n", 1, st_mod.RECORD_EVERY_N_MAX)
-        ctk.CTkLabel(scroll, text=self.tr("cfg_classes")).pack(pady=(8, 0))
+        ctk.CTkButton(sec_capture, text=self.tr("reload_cameras"),
+                      command=self._refresh_cameras).pack(fill="x", pady=(4, 0))
+        row_slider(self.tr("cfg_confidence"), "conf_threshold", st_mod.CONF_MIN, st_mod.CONF_MAX, sec_capture)
+        row_slider(self.tr("cfg_sync"), "sync_interval_min", 1, 60, sec_capture)
+        row_slider(self.tr("cfg_model"), "model_size", st_mod.MODEL_SIZES[0], st_mod.MODEL_SIZES[1], sec_capture)
+        row_slider(self.tr("cfg_record_n"), "record_every_n", 1, st_mod.RECORD_EVERY_N_MAX, sec_capture)
+        sec_classes = _card("cfg_classes")
         self._cls_vars = {}
         for k in KEYS:
             v = ctk.BooleanVar(value=bool(self.cfg["clases_activas"].get(k, True)))
             self._cls_vars[k] = v
-            ctk.CTkCheckBox(scroll, text=self.labels[k], variable=v).pack(anchor="w", padx=20)
-        ctk.CTkLabel(scroll, text=self.tr("cfg_device")).pack()
-        e_name = ctk.CTkEntry(scroll)
-        e_name.insert(0, self.cfg.get("device_name", ""))
-        e_name.pack(fill="x", padx=12)
-        ctk.CTkLabel(scroll, text=self.tr("cfg_lang")).pack()
-        lang_names = dict(lng.LANGS)
-        lang_var = ctk.StringVar(value=lang_names.get(self.lang, lang_names.get(lng.DEFAULT_LANG, "Español")))
-        ctk.CTkOptionMenu(scroll, variable=lang_var,
-                          values=list(lang_names.values()),
-                          command=lambda _: None).pack(fill="x", padx=12)
-        self._lang_var = lang_var
-        self._lang_names = lang_names
+            ctk.CTkCheckBox(sec_classes, text=self.labels[k], variable=v).pack(anchor="w", padx=4, pady=1)
+
+
         # dirección -> coords vía Nominatim gratuita (con confirmación)
-        ctk.CTkLabel(scroll, text=self.tr("cfg_address")).pack()
-        e_addr = ctk.CTkEntry(scroll, placeholder_text=self.tr("cfg_addr_ph"))
+        sec_location = _card("cfg_sec_location")
+        ctk.CTkLabel(sec_location, text=self.tr("cfg_address")).pack(anchor="w")
+        e_addr = ctk.CTkEntry(sec_location, placeholder_text=self.tr("cfg_addr_ph"))
         e_addr.pack(fill="x", padx=12)
-        card = ctk.CTkFrame(scroll)
+        card = ctk.CTkFrame(sec_location)
         card.pack(fill="x", padx=12, pady=6)
         lbl_geo_title = ctk.CTkLabel(card, text=self.tr("geo_idle"),
                                      wraplength=360, justify="left",
@@ -848,35 +880,35 @@ class App:
                     lbl_geo_title.configure(text=self.tr("geo_none"))
                     lbl_geo_full.configure(text=str(exc)[:200])
             threading.Thread(target=_t, daemon=True).start()
-        ctk.CTkButton(scroll, text=self.tr("cfg_search"),
-                      command=_buscar).pack(fill="x", padx=12, pady=4)
-        ctk.CTkLabel(scroll, text=self.tr("cfg_coords")).pack()
-        e_coords = ctk.CTkEntry(scroll)
+        ctk.CTkButton(sec_location, text=self.tr("cfg_search"),
+                      command=_buscar).pack(fill="x", pady=(4, 0))
+        ctk.CTkLabel(sec_location, text=self.tr("cfg_coords")).pack(anchor="w")
+        e_coords = ctk.CTkEntry(sec_location)
         e_coords.insert(0, self.cfg.get("coords", ""))
         e_coords.pack(fill="x", padx=12)
         # ctk.CTkLabel(scroll, text=self.tr("geo_source"),
         #              text_color="gray").pack()
-        ctk.CTkLabel(scroll, text=self.tr("cfg_side_a")).pack()
-        e_side_a = ctk.CTkEntry(scroll, placeholder_text=self.tr("cfg_side_a_ph"))
+        sec_line = _card("cfg_line_section")
+        ctk.CTkLabel(sec_line, text=self.tr("cfg_side_a")).pack(anchor="w")
+        e_side_a = ctk.CTkEntry(sec_line, placeholder_text=self.tr("cfg_side_a_ph"))
         e_side_a.insert(0, self.cfg.get("side_a", ""))
         e_side_a.pack(fill="x", padx=12)
-        ctk.CTkLabel(scroll, text=self.tr("cfg_side_b")).pack()
-        e_side_b = ctk.CTkEntry(scroll, placeholder_text=self.tr("cfg_side_b_ph"))
+        ctk.CTkLabel(sec_line, text=self.tr("cfg_side_b")).pack(anchor="w")
+        e_side_b = ctk.CTkEntry(sec_line, placeholder_text=self.tr("cfg_side_b_ph"))
         e_side_b.insert(0, self.cfg.get("side_b", ""))
         e_side_b.pack(fill="x", padx=12)
-        ctk.CTkLabel(scroll, text=self.tr("cfg_line_section")).pack(pady=(8, 0))
         var_persist = ctk.BooleanVar(value=bool(self.cfg.get("line_persistent", True)))
-        ctk.CTkCheckBox(scroll, text=self.tr("cfg_line_persistent"),
-                        variable=var_persist).pack(anchor="w", padx=20)
-        ctk.CTkLabel(scroll, text=self.tr("cfg_line_hint"),
-                     text_color="gray").pack()
+        ctk.CTkCheckBox(sec_line, text=self.tr("cfg_line_persistent"),
+                        variable=var_persist).pack(anchor="w", pady=(4, 0))
+        ctk.CTkLabel(sec_line, text=self.tr("cfg_line_hint"),
+                     text_color="gray", wraplength=360, justify="left").pack(anchor="w")
         # Debug: host a localhost, solo sesión, default off, con código 4 dígitos
-        ctk.CTkLabel(scroll, text=self.tr("cfg_debug")).pack(pady=(10, 0))
-        ctk.CTkLabel(scroll, text=self.tr("cfg_debug_port")).pack()
-        e_dbg_port = ctk.CTkEntry(scroll, placeholder_text="8000")
+        sec_debug = _card("cfg_debug")
+        ctk.CTkLabel(sec_debug, text=self.tr("cfg_debug_port")).pack(anchor="w")
+        e_dbg_port = ctk.CTkEntry(sec_debug, placeholder_text="8000")
         e_dbg_port.insert(0, getattr(self, "debug_port", "8000"))
         e_dbg_port.pack(fill="x", padx=12)
-        lbl_dbg = ctk.CTkLabel(scroll, text="", wraplength=380, justify="left",
+        lbl_dbg = ctk.CTkLabel(sec_debug, text="", wraplength=360, justify="left",
                                text_color="gray")
         lbl_dbg.pack(padx=12)
 
@@ -924,7 +956,7 @@ class App:
             ctk.CTkButton(win2, text=self.tr("debug_modal_ok"), fg_color="orange",
                           command=_ok).pack(pady=2)
             entry.bind("<Return>", _ok)
-        btn_dbg = ctk.CTkButton(scroll, text=self.tr("debug_activate"), command=_toggle_dbg)
+        btn_dbg = ctk.CTkButton(sec_debug, text=self.tr("debug_activate"), command=_toggle_dbg)
         btn_dbg.pack(fill="x", padx=12, pady=4)
         btn_apply_port = ctk.CTkButton(scroll, text=self.tr("debug_apply"),
                                        command=lambda: (
