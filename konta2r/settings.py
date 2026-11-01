@@ -40,7 +40,6 @@ MODEL_SIZES = (320, 640)
 MODEL_DEFAULT = 320
 MODEL_SWITCH_THRESHOLD = 480  # slider: >= esto usa el grande
 RAM_SMALL_GB = 2.0  # hasta esto se sugiere el modelo chico
-# OJO: el de 640 no lleva sufijo en el nombre del archivo.
 MODEL_FILES = {320: "yolo26n-320.onnx", 640: "yolo26n.onnx"}
 
 
@@ -68,17 +67,27 @@ CONF_MAX = 0.9
 # ---- Clases contables (keys internas + etiquetas UI) ----
 CLASS_KEYS = ("person", "bicycle", "skater", "car",
               "motorcycle", "bus", "truck", "pet")
-CLASS_LABELS = {"person": "Peatones", "bicycle": "Bicis",
-                "skater": "Patinetas", "car": "Autos",
+CLASS_LABELS = {"person": "Peatones", "bicycle": "Bicicletas",
+                "skater": "Skates", "car": "Autos",
                 "motorcycle": "Motos", "bus": "Buses",
                 "truck": "Camiones", "pet": "Mascotas"}
 
 # ---- Sync / medición ----
-SYNC_INTERVAL_DEFAULT = 5  # minutos entre envíos
+SYNC_INTERVAL_DEFAULT = 1  # minutos entre envíos
 
 # ---- Límites de texto (API: máx 100 lados, 200 nombre) ----
 SIDE_NAME_MAX = 100
 DEVICE_NAME_MAX = 200
+
+# ---- Tracker (idéntico a la web; ms / frames / px) ----
+TRACK_MAX_AGE_MS = 1500     # olvida tracks sin ver por más de esto
+TRACK_MIN_STABLE = 3        # frames estables para contar por aparición
+TRACK_COOLDOWN_MS = 1200    # anti-doble-conteo tras un cruce
+TRACK_DEADZONE_PX = 12      # banda muerta sobre la línea
+TRACK_MATCH_MIN_PX = 60     # distancia máx de asociación (piso)
+TRACK_MATCH_MAX_PX = 180    # distancia máx de asociación (techo)
+TRACK_MATCH_DIAG_FACTOR = 0.8  # techo = diagonal_bbox * factor
+TRACK_IOU_WEIGHT = 80       # score = dist - IoU * peso
 
 # ---- Debug local (solo sesión, no persistente) ----
 DEBUG_HOST = "http://localhost"

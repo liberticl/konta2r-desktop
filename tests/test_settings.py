@@ -46,6 +46,13 @@ def test_clases_centralizadas():
     assert ui.LABELS == st.CLASS_LABELS
 
 
+def test_tracker_usa_settings():
+    from konta2r import tracker as tr
+    assert (tr.TRACK_MAX_AGE, tr.MIN_STABLE, tr.COOLDOWN, tr.DEADZONE) == (
+        st.TRACK_MAX_AGE_MS, st.TRACK_MIN_STABLE,
+        st.TRACK_COOLDOWN_MS, st.TRACK_DEADZONE_PX)
+
+
 def test_sin_literales_duplicados():
     """Nadie repite rutas ni URL base: solo settings.py los define."""
     for f in ROOT.glob("*.py"):

@@ -1,6 +1,6 @@
 # Build
 
-## Ubuntu x64 (primero)
+## Ubuntu x64
 ```bash
 pip install -r requirements.txt pyinstaller
 pyinstaller build/konta2r.spec
@@ -23,5 +23,6 @@ pip install -r requirements.txt pyinstaller
 pyinstaller build\konta2r.spec
 dist\konta2r\konta2r.exe
 ```
+
 Onefile windowed: el spec usa `console=False`; para onefile cambia a
 `EXE(..., exclude_binaries=False)` o `pyinstaller --onefile --windowed -n konta2r konta2r/__main__.py`.

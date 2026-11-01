@@ -2,10 +2,12 @@
 from __future__ import annotations
 import math
 
-TRACK_MAX_AGE = 1500      # ms
-MIN_STABLE = 3            # frames
-COOLDOWN = 1200           # ms
-DEADZONE = 12             # px (signedDistance)
+from konta2r import settings as st
+
+TRACK_MAX_AGE = st.TRACK_MAX_AGE_MS      # ms (alias; ver settings.py)
+MIN_STABLE = st.TRACK_MIN_STABLE        # frames (alias; ver settings.py)
+COOLDOWN = st.TRACK_COOLDOWN_MS         # ms (alias; ver settings.py)
+DEADZONE = st.TRACK_DEADZONE_PX         # px, signedDistance (alias)
 
 
 def foot_point(bbox):
@@ -75,11 +77,11 @@ class Tracker:
                 continue
             d = dist(tr["center"], det["center"])
             diag = math.hypot(det["bbox"][2], det["bbox"][3])
-            max_d = max(60, min(180, diag * 0.8))
+            max_d = max(st.TRACK_MATCH_MIN_PX, min(st.TRACK_MATCH_MAX_PX, diag * st.TRACK_MATCH_DIAG_FACTOR))
             ov = iou(tr["bbox"], det["bbox"])
             if d > max_d and ov < 0.05:
                 continue
-            score = d - ov * 80
+            score = d - ov * st.TRACK_IOU_WEIGHT
             if score < best_score:
                 best, best_score = tid, score
         return best
