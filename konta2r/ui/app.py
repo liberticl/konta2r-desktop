@@ -90,6 +90,7 @@ class App:
         self._status_pending_cam = None
         self.cam_var = None
         self.cam_menu = None
+        self._cfg_cam_menu = None
         self.disp_w, self.disp_h = st_mod.DISPLAY_W_DEFAULT, st_mod.DISPLAY_H_DEFAULT  # se ajusta al canvas real
         self.lbl_net = None
         self.frame, self.disp_boxes = None, []
@@ -479,9 +480,18 @@ class App:
         except Exception:
             pass
 
+    def _in_use_skip(self) -> set:
+        """Índices que no se deben abrir al sondear (cámara en uso)."""
+        try:
+            if self.running and getattr(self.cam, "cap", None) is not None:
+                return {int(self.cam.index)}
+        except Exception:  # noqa: BLE001
+            pass
+        return set()
+
     def _refresh_cameras(self):
         try:
-            cams = list_cameras()
+            cams = list_cameras(skip_open=self._in_use_skip())
         except Exception as exc:  # noqa: BLE001
             self._status(self.tr("cam_enum_error", exc=exc))
             return
@@ -493,6 +503,11 @@ class App:
             self.running = False
             return
         self.cam_menu.configure(values=list(self.cam_options))
+        try:
+            if getattr(self, "_cfg_cam_menu", None) is not None:
+                self._cfg_cam_menu.configure(values=list(self.cam_options))
+        except Exception:  # noqa: BLE001
+            self._cfg_cam_menu = None
         cur = int(self.cfg.get("camera_index", 0))
         if cur not in self.avail_cams:
             self._status(self.tr("cam_gone", cur=cur))
@@ -726,13 +741,10 @@ class App:
                 lbl.configure(text=fmt.format(self.cfg[key]))
             ctk.CTkSlider(scroll, from_=lo, to=hi, variable=var,
                           command=_cb).pack(fill="x", padx=12)
-        # selector de cámara en config (nombres, solo disponibles)
+        # selector de cámara en config: usa la lista ya conocida (no reabre
+        # la cámara en uso; para detectar nuevas usa ↻ Recargar cámaras)
         ctk.CTkLabel(scroll, text=self.tr("camera_label")).pack()
-        try:
-            cams_cfg = list_cameras()
-        except Exception:  # noqa: BLE001
-            cams_cfg = []
-        opts_cfg = {camera_label(i, n): i for i, n in cams_cfg} or {"sin cámaras": -1}
+        opts_cfg = dict(self.cam_options) or {"sin cámaras": -1}
         cur_cfg = next((lb for lb, ix in opts_cfg.items()
                         if ix == int(self.cfg.get("camera_index", 0))), next(iter(opts_cfg)))
         cam_var_cfg = ctk.StringVar(value=cur_cfg)
@@ -745,9 +757,12 @@ class App:
                 self.cam_var.set(choice)
             except Exception:  # noqa: BLE001
                 pass
-        ctk.CTkOptionMenu(scroll, variable=cam_var_cfg,
+        self._cfg_cam_menu = ctk.CTkOptionMenu(scroll, variable=cam_var_cfg,
                           values=list(opts_cfg),
-                          command=_cfg_cam).pack(fill="x", padx=12)
+                          command=_cfg_cam)
+        self._cfg_cam_menu.pack(fill="x", padx=12)
+        ctk.CTkButton(scroll, text=self.tr("reload_cameras"),
+                      command=self._refresh_cameras).pack(fill="x", padx=12, pady=(0, 4))
         row_slider(self.tr("cfg_confidence"), "conf_threshold", st_mod.CONF_MIN, st_mod.CONF_MAX)
         row_slider(self.tr("cfg_sync"), "sync_interval_min", 1, 60)
         row_slider(self.tr("cfg_model"), "model_size", st_mod.MODEL_SIZES[0], st_mod.MODEL_SIZES[1])

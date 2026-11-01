@@ -124,14 +124,20 @@ def _device_key(i: int, name: str) -> str | None:
     return None
 
 
-def list_cameras(max_index: int | None = None) -> list[tuple[int, str]]:
+def list_cameras(max_index: int | None = None,
+                skip_open: frozenset[int] | set[int] | tuple = ()
+                ) -> list[tuple[int, str]]:
     """Solo disponibles, UNA entrada por cámara física.
 
     Cada cámara suele exponer 2 nodos /dev/video (captura + metadata)
     con el mismo nombre; se conserva solo el primero de cada grupo.
+
+    `skip_open`: índices que NO se abren (ej. la cámara en uso: reabrirla
+    corta el preview). Se listan igual por sysfs/nombre.
     """
     if max_index is None:
         max_index = pf.camera_probe_max()
+    skip_open = set(skip_open)
     backend = pf.camera_backend()
     sys_names = _friendly_names()
     existing = _sysfs_video_indices()
@@ -139,12 +145,16 @@ def list_cameras(max_index: int | None = None) -> list[tuple[int, str]]:
     candidates: list[tuple[int, str]] = []
     with _quiet_opencv(), _quiet_stdio():
         for i in indices:
-            cap = cv2.VideoCapture(i, backend) if backend is not None else cv2.VideoCapture(i)
-        ok = cap.isOpened()
-        cap.release()
-        if ok:
             nm = sys_names.get(i) or _sysfs_name(i) or f"Cámara {i}"
-            candidates.append((i, nm))
+            if i in skip_open:
+                candidates.append((i, nm))
+                continue
+            cap = (cv2.VideoCapture(i, backend) if backend is not None
+                   else cv2.VideoCapture(i))
+            ok = cap.isOpened()
+            cap.release()
+            if ok:
+                candidates.append((i, nm))
     # dedup por dispositivo físico (solo cuando hay sysfs; sin eso se
     # conservan todas para no ocultar una cámara real)
     seen: set[str] = set()

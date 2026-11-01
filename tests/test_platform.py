@@ -56,6 +56,28 @@ def test_describe_and_ram():
     assert r is None or r > 0
 
 
+def test_skip_open_no_abre(monkeypatch):
+    import cv2
+    import konta2r.capture as cap
+    abiertos = []
+
+    def falso(i, *a):
+        abiertos.append(i)
+
+        class C:
+            def isOpened(self):
+                return i in (0, 2)
+
+            def release(self):
+                pass
+        return C()
+    monkeypatch.setattr(cv2, "VideoCapture", falso)
+    monkeypatch.setattr(cap, "_sysfs_video_indices", lambda: [0, 1, 2])
+    got = cap.list_cameras(skip_open={0})
+    assert 0 not in abiertos and set(abiertos) == {1, 2}
+    assert 0 in [i for i, _ in got]
+
+
 def test_dshow_names_without_dependency():
     assert isinstance(pf.dshow_device_names(), dict)
 
