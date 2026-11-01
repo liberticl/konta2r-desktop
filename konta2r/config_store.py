@@ -32,6 +32,7 @@ DEFAULTS = {
     "api_base": st.API_BASE_DEFAULT,
     "token": "",
     "fingerprint": "",
+    "lang": st.LANG_DEFAULT,
 }
 
 

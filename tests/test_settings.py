@@ -39,11 +39,15 @@ def test_defaults_centralizados():
 
 
 def test_clases_centralizadas():
+    from konta2r import strings as lng
     assert tuple(infer.COUNT_KEYS) == tuple(st.CLASS_KEYS)
-    from konta2r.ui import app as _  # noqa: F401  (solo si hay GUI)
+    assert set(lng.CLASS_NAMES) == set(st.CLASS_KEYS)
+    for key in st.CLASS_KEYS:
+        for lang in ("es", "en", "pt"):
+            assert lng.class_name(key, lang), f"{key}/{lang} vacío"
     import konta2r.ui.app as ui
     assert tuple(ui.KEYS) == tuple(st.CLASS_KEYS)
-    assert ui.LABELS == st.CLASS_LABELS
+    assert not hasattr(st, "CLASS_LABELS"), "nombres visibles solo en strings.py"
 
 
 def test_tracker_usa_settings():

@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from konta2r import platform as pf
 
+# Idioma de la UI (código). Textos en strings.py.
+LANG_DEFAULT = "es"
+
 # ---- Rutas (derivan de platform; no reconstruir os.path en cada módulo) ----
 CONFIG_DIR = pf.config_dir()
 CONFIG_PATH = f"{CONFIG_DIR}/config.json"
@@ -67,10 +70,7 @@ CONF_MAX = 0.9
 # ---- Clases contables (keys internas + etiquetas UI) ----
 CLASS_KEYS = ("person", "bicycle", "skater", "car",
               "motorcycle", "bus", "truck", "pet")
-CLASS_LABELS = {"person": "Peatones", "bicycle": "Bicicletas",
-                "skater": "Skates", "car": "Autos",
-                "motorcycle": "Motos", "bus": "Buses",
-                "truck": "Camiones", "pet": "Mascotas"}
+# Nombres visibles por idioma: strings.CLASS_NAMES (único lugar).
 
 # ---- Sync / medición ----
 SYNC_INTERVAL_DEFAULT = 1  # minutos entre envíos
