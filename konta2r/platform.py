@@ -13,8 +13,10 @@ import subprocess
 
 APP_NAME = "konta2r"
 
-# Tamaños de modelo ONNX disponibles (chico, grande).
-MODEL_SIZES = (320, 640)
+
+def machine() -> str:
+    """Arquitectura (x86_64, aarch64, AMD64...)."""
+    return _plat.machine()
 
 _OVERRIDE = os.environ.get("KONTA2R_PLATFORM", "auto").strip().lower()
 
@@ -146,16 +148,6 @@ def infer_threads() -> int:
     return max(1, min(n - 1, 4))
 
 
-def default_model_size() -> int:
-    """Solo para instalaciones nuevas: Pi o poca RAM -> chico."""
-    if is_raspberry_pi():
-        return MODEL_SIZES[0]
-    ram = total_ram_gb()
-    if ram is not None and ram <= 2.0:
-        return MODEL_SIZES[0]
-    return MODEL_SIZES[1]
-
-
 def is_headless() -> bool:
     if IS_LINUX:
         return not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
@@ -172,11 +164,3 @@ def tk_install_hint() -> str:
     return ("Falta Tk: sudo apt install python3-tk. "
             "Con pyenv, instala libtk8.6-dev + libjpeg-dev y recompila: "
             "pyenv install <versión>.")
-
-
-def describe() -> str:
-    ram = total_ram_gb()
-    ram_s = f"{ram:.1f}" if ram else "?"
-    return (f"so={SYSTEM} maq={_plat.machine()} rpi={is_raspberry_pi()} "
-            f"ram_gb={ram_s} hilos={infer_threads()} "
-            f"modelo_sugerido={default_model_size()}")

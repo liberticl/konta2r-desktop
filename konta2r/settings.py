@@ -2,8 +2,8 @@
 
 Regla: ningún otro módulo define rutas, defaults de config, timeouts de
 red, tamaños de modelo, clases ni límites de texto. Todos importan desde
-aquí (`from konta2r import settings as st`). Lo que depende del SO vive
-en `platform.py`; aquí solo se reunifican los valores de la app.
+aquí (`from konta2r import settings as st`). A `platform.py` solo se le
+preguntan hechos del SO (no guarda valores de la app).
 """
 from __future__ import annotations
 
@@ -34,11 +34,31 @@ RECORD_FOURCC = "mp4v"
 RECORD_FPS = 20.0
 
 # ---- Modelo / inferencia ----
-MODEL_SIZES = pf.MODEL_SIZES
+MODEL_SIZES = (320, 640)
 MODEL_DEFAULT = 320
+MODEL_SWITCH_THRESHOLD = 480  # slider: >= esto usa el grande
+RAM_SMALL_GB = 2.0  # hasta esto se sugiere el modelo chico
 # OJO: el de 640 no lleva sufijo en el nombre del archivo.
 MODEL_FILES = {320: "yolo26n-320.onnx", 640: "yolo26n.onnx"}
-MODEL_SWITCH_THRESHOLD = 480  # slider: >= esto usa el grande
+
+
+def default_model_size() -> int:
+    """Solo instalaciones nuevas: Pi o poca RAM -> chico."""
+    if pf.is_raspberry_pi():
+        return MODEL_SIZES[0]
+    ram = pf.total_ram_gb()
+    if ram is not None and ram <= RAM_SMALL_GB:
+        return MODEL_SIZES[0]
+    return MODEL_SIZES[1]
+
+
+def describe() -> str:
+    """Una línea para el log de inicio: entorno efectivo de la app."""
+    ram = pf.total_ram_gb()
+    ram_s = f"{ram:.1f}" if ram else "?"
+    return (f"so={pf.SYSTEM} maq={pf.machine()} "
+            f"rpi={pf.is_raspberry_pi()} ram_gb={ram_s} "
+            f"hilos={pf.infer_threads()} modelo_sugerido={default_model_size()}")
 CONF_DEFAULT = 0.50
 CONF_MIN = 0.1
 CONF_MAX = 0.9

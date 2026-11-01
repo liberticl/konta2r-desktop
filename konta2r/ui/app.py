@@ -50,7 +50,7 @@ class App:
         self.cfg = config_store.load()
         if not os.path.exists(config_store.CONFIG_PATH):
             # primera ejecución: modelo según plataforma/RAM
-            self.cfg["model_size"] = pf_mod.default_model_size()
+            self.cfg["model_size"] = st_mod.default_model_size()
         self.db = store_mod.Store()
         self.tracker = tracker_mod.Tracker()
         self.counts = {k: 0 for k in KEYS}
@@ -993,7 +993,7 @@ class App:
 def main(argv=None):
     require_gui()
     try:
-        dbg_mod.log(f"konta2r-desktop inicio ({pf_mod.describe()})")
+        dbg_mod.log(f"konta2r-desktop inicio ({st_mod.describe()})")
     except Exception:
         pass
     app = App()

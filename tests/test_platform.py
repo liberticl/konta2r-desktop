@@ -2,6 +2,7 @@
 import os
 
 from konta2r import platform as pf
+from konta2r import settings as st
 
 
 def test_raspberry_pi_from_device_tree(tmp_path):
@@ -40,17 +41,17 @@ def test_infer_threads_bounds():
 
 def test_default_model_size(monkeypatch):
     monkeypatch.setattr(pf, "is_raspberry_pi", lambda *a, **k: True)
-    assert pf.default_model_size() == 320
+    assert st.default_model_size() == 320
     monkeypatch.setattr(pf, "is_raspberry_pi", lambda *a, **k: False)
     monkeypatch.setattr(pf, "total_ram_gb", lambda: 1.0)
-    assert pf.default_model_size() == 320
+    assert st.default_model_size() == 320
     monkeypatch.setattr(pf, "total_ram_gb", lambda: 16.0)
-    assert pf.default_model_size() == 640
+    assert st.default_model_size() == 640
 
 
 def test_describe_and_ram():
-    s = pf.describe()
-    assert "so=" in s and "hilos=" in s
+    s = st.describe()
+    assert "so=" in s and "hilos=" in s and "modelo_sugerido=" in s
     r = pf.total_ram_gb()
     assert r is None or r > 0
 
