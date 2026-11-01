@@ -36,6 +36,8 @@ RECORD_FPS = 20.0
 # ---- Modelo / inferencia ----
 MODEL_SIZES = pf.MODEL_SIZES
 MODEL_DEFAULT = 320
+# OJO: el de 640 no lleva sufijo en el nombre del archivo.
+MODEL_FILES = {320: "yolo26n-320.onnx", 640: "yolo26n.onnx"}
 MODEL_SWITCH_THRESHOLD = 480  # slider: >= esto usa el grande
 CONF_DEFAULT = 0.50
 CONF_MIN = 0.1

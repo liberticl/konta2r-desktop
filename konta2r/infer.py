@@ -32,7 +32,7 @@ RULES = {
     36: ("skater", "patineta", "#ff6600", "skateboard"),
 }
 
-COUNT_KEYS = st.CLASS_KEYS  # alias histórico; usar settings.CLASS_KEYS
+COUNT_KEYS = st.CLASS_KEYS
 
 
 def parse_output0(output: np.ndarray, conf: float = st.CONF_DEFAULT,
@@ -79,13 +79,22 @@ class Session:
 
 
 def default_model_path(size: int = st.MODEL_DEFAULT) -> str:
+    try:
+        fname = st.MODEL_FILES.get(int(size), st.MODEL_FILES[st.MODEL_SIZES[1]])
+    except (ValueError, TypeError):
+        fname = st.MODEL_FILES[st.MODEL_SIZES[1]]
     base = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
     alt = os.path.join(os.path.dirname(__file__), "..", "models")
-    name = (f"yolo26n-{st.MODEL_SIZES[0]}.onnx" if int(size) == st.MODEL_SIZES[0]
-            else f"yolo26n-{st.MODEL_SIZES[1]}.onnx")
-    for cand in (os.path.join(base, name), os.path.join(alt, name), name):
+    for cand in (os.path.join(base, fname), os.path.join(alt, fname), fname):
         if os.path.exists(cand):
             return cand
-    # ultimo recurso: junto al paquete
-    here = os.path.join(os.path.dirname(__file__), "models", name)
+    # fallback: el otro tamaño si existe (avisa en el log quien llama)
+    for other in st.MODEL_FILES.values():
+        if other == fname:
+            continue
+        for cand in (os.path.join(base, other), os.path.join(alt, other)):
+            if os.path.exists(cand):
+                return cand
+    # ultimo recurso: junto al paquete (fallará con FileNotFoundError claro)
+    here = os.path.join(os.path.dirname(__file__), "models", fname)
     return here

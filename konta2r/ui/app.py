@@ -160,7 +160,11 @@ class App:
                 path = infer_mod.default_model_path(self.model_size)
                 if not os.path.exists(path):
                     self._status(f"modelo no encontrado: {path}")
+                    self._toast(f"Modelo no encontrado: {path}")
                     return
+                want = st_mod.MODEL_FILES.get(int(self.model_size), "")
+                if want and os.path.basename(path) != want:
+                    self._status(f"modelo {self.model_size}px ausente, usando {os.path.basename(path)}")
                 self.sess = infer_mod.Session(path)
                 self._status(f"modelo {self.model_size}px listo")
                 self._toast(f"Modelo {self.model_size}px listo")
@@ -944,7 +948,12 @@ class App:
                 path = infer_mod.default_model_path(size)
                 if not os.path.exists(path):
                     self._status(f"modelo no encontrado: {path}")
+                    self._toast(f"Modelo no encontrado: {path}")
                     return
+                want = st_mod.MODEL_FILES.get(int(size), "")
+                if want and os.path.basename(path) != want:
+                    self._status(f"modelo {size}px ausente, usando {os.path.basename(path)}")
+                    self._toast(f"Sin modelo {size}px, usando alternativo")
                 sess = infer_mod.Session(path)
                 self.sess = sess
                 self._status(f"modelo {size}px listo")
