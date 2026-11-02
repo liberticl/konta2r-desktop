@@ -1,0 +1,8 @@
+# Contexto mínimo para build/Dockerfile.pi (no subir artefactos viejos).
+build/konta2r/
+build/deb-pkg/
+dist/
+releases/
+__pycache__/
+*.pyc
+.pytest_cache/

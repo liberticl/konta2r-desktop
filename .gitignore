@@ -11,3 +11,8 @@ config.json
 *.deb
 build/deb-pkg/
 build/konta2r/
+
+# Binarios y artefactos generados (van a GitHub Releases, no a git)
+*.tar.gz
+models/*.onnx
+releases/rpi/konta2r/

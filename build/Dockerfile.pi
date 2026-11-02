@@ -1,0 +1,19 @@
+# Build emulado para Raspberry Pi 4B (aarch64).
+# Se usa Debian bookworm porque su python3 del sistema es 3.11 con Tk
+# (python3-tk), que la imagen python:slim no trae y customtkinter necesita.
+# Uso: ./build/build-pi.sh   (o docker buildx build --platform linux/arm64 -f build/Dockerfile.pi -t konta2r-pi-builder .)
+FROM --platform=linux/arm64 debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_BREAK_SYSTEM_PACKAGES=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-tk python3-dev \
+    libgl1 libglib2.0-0 libv4l-0 build-essential ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY requirements-pi.txt .
+RUN pip3 install --no-cache-dir pyinstaller -r requirements-pi.txt
+COPY . .
+RUN python3 -m PyInstaller build/konta2r.spec
