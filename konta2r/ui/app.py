@@ -99,15 +99,84 @@ class App:
         self._rec_count = 0
         self._loop_fps = 0.0  # EMA del loop real; base del fps de grabación
         self._ui_thread = threading.get_ident()
+        self._i18n = []  # (widget, clave|fn, kwargs) para re-traducir en vivo
+        self._net_online = None
         self._build_ui()
         self._load_model_async()
 
     def tr(self, key: str, **kw) -> str:
         return lng.t(key, self.lang, **kw)
 
+    def _T(self, widget, key, **kw):
+        """Registra un widget para re-traducirlo al cambiar el idioma."""
+        self._i18n.append((widget, key, kw))
+        return widget
+
+    def retranslate(self):
+        """Re-aplica el idioma a la ventana principal, en vivo."""
+        self.labels = {k: lng.class_name(k, self.lang) for k in KEYS}
+        for widget, key, kw in self._i18n:
+            try:
+                if isinstance(key, tuple) and key[0] == "class":
+                    txt = lng.class_name(key[1], self.lang)
+                elif callable(key):
+                    txt = key()
+                else:
+                    txt = self.tr(key, **kw)
+                widget.configure(text=txt)
+            except Exception:
+                pass
+        self._refresh_measure_ui()
+        self._refresh_net_ui()
+        self._refresh_cam_menu()
+
+    def _refresh_measure_ui(self):
+        try:
+            if self.measuring:
+                self.btn_measure.configure(text=self.tr("measure_stop"),
+                                           fg_color=st_mod.UI_STOP)
+                self.lbl_measure.configure(text=self.tr("measure_active"),
+                                           text_color=st_mod.UI_STOP)
+            else:
+                self.btn_measure.configure(text=self.tr("measure_start"),
+                                           fg_color=st_mod.UI_START)
+                self.lbl_measure.configure(text=self.tr("measure_idle"),
+                                           text_color="gray")
+        except Exception:
+            pass
+
+    def _refresh_net_ui(self):
+        try:
+            if self._net_online is True:
+                self.lbl_net.configure(text=self.tr("net_online"), text_color="green")
+            elif self._net_online is False:
+                self.lbl_net.configure(text=self.tr("net_offline"), text_color="red")
+            else:
+                self.lbl_net.configure(text=self.tr("net_unknown"), text_color="gray")
+        except Exception:
+            pass
+
+    def _refresh_cam_menu(self):
+        try:
+            self.cam_menu.configure(
+                values=list(self.cam_options) or [f"0 · {self.tr('no_cameras')}"])
+            cur = int(self.cfg.get("camera_index", 0))
+            cur_label = next((lb for lb, ix in self.cam_options.items()
+                              if ix == cur), None)
+            if cur_label is None and self.cam_options:
+                cur_label = next(iter(self.cam_options))
+            if cur_label:
+                self.cam_var.set(cur_label)
+        except Exception:
+            pass
+
+    def _effective_theme(self) -> str:
+        th = (self.cfg.get("theme") or st_mod.THEME_DEFAULT)
+        return th if th in st_mod.THEMES else st_mod.THEME_DEFAULT
+
     # ---- UI ----
     def _build_ui(self):
-        ctk.set_appearance_mode("dark")
+        ctk.set_appearance_mode(self._effective_theme())
         self.root = ctk.CTk()
         self.root.title(self.tr("app_title"))
         self.root.geometry("1100x700")
@@ -127,9 +196,9 @@ class App:
                                border_width=st_mod.UI_CARD_BORDER)
             box.pack(fill="x", padx=2, pady=(0, 8))
             if title_key:
-                ctk.CTkLabel(box, text=self.tr(title_key),
-                             font=(st_mod.UI_FONT, st_mod.UI_SECTION, "bold")).pack(
-                                 anchor="w", padx=10, pady=(8, 2))
+                self._T(ctk.CTkLabel(box, text=self.tr(title_key),
+                             font=(st_mod.UI_FONT, st_mod.UI_SECTION, "bold")),
+                        title_key).pack(anchor="w", padx=10, pady=(8, 2))
             inner = ctk.CTkFrame(box, fg_color="transparent")
             inner.pack(fill="x", padx=10, pady=(0, 10))
             return inner
@@ -177,17 +246,20 @@ class App:
             values=list(self.cam_options) or [f"0 · {self.tr('no_cameras')}"],
             command=self._switch_camera)
         self.cam_menu.pack(fill="x", pady=(0, 4))
-        ctk.CTkButton(sec_cam, text=self.tr("reload_cameras"),
-                      command=self._refresh_cameras).pack(fill="x", pady=(4, 0))
+        self._T(ctk.CTkButton(sec_cam, text=self.tr("reload_cameras"),
+                      command=self._refresh_cameras), "reload_cameras").pack(fill="x", pady=(4, 0))
 
         # Detecciones
         sec_count = _section("sec_counts")
         self.count_labels = {}
+        self.count_names = {}
         for k in KEYS:
             row = ctk.CTkFrame(sec_count, fg_color="transparent")
             row.pack(fill="x", pady=2)
-            ctk.CTkLabel(row, text=self.labels[k], width=110, anchor="w",
-                         text_color=st_mod.UI_MUTED).pack(side="left")
+            name_lbl = ctk.CTkLabel(row, text=self.labels[k], width=110, anchor="w",
+                                    text_color=st_mod.UI_MUTED)
+            name_lbl.pack(side="left")
+            self.count_names[k] = self._T(name_lbl, ("class", k))
             lbl = ctk.CTkLabel(row, text="0", width=60, anchor="e",
                                font=(st_mod.UI_FONT, st_mod.UI_VALUE, "bold"))
             lbl.pack(side="right")
@@ -195,21 +267,21 @@ class App:
 
         # Acciones
         sec_act = _section("sec_actions")
-        for txt, cmd in [(self.tr("btn_record"), self.toggle_record),
-                         (self.tr("btn_photo"), self.save_photo),
-                         (self.tr("btn_csv"), self.save_csv),
-                         (self.tr("btn_line"), self.toggle_line)]:
-            ctk.CTkButton(sec_act, text=txt, command=cmd,
-                          height=st_mod.UI_BTN_H,
-                          corner_radius=st_mod.UI_CARD_RADIUS).pack(fill="x", pady=2)
+        for key, cmd in [("btn_record", self.toggle_record),
+                         ("btn_photo", self.save_photo),
+                         ("btn_csv", self.save_csv),
+                         ("btn_line", self.toggle_line)]:
+            self._T(ctk.CTkButton(sec_act, text=self.tr(key), command=cmd,
+                                  height=st_mod.UI_BTN_H,
+                                  corner_radius=st_mod.UI_CARD_RADIUS), key).pack(fill="x", pady=2)
 
         # Config
         sec_cfg = _section()
-        for txt, cmd in [(self.tr("btn_config"), self.open_config),
-                         (self.tr("btn_terminal"), self.toggle_terminal)]:
-            ctk.CTkButton(sec_cfg, text=txt, command=cmd, fg_color=st_mod.UI_PRIMARY,
-                          height=st_mod.UI_BTN_H,
-                          corner_radius=st_mod.UI_CARD_RADIUS).pack(fill="x", pady=2)
+        for key, cmd in [("btn_config", self.open_config),
+                         ("btn_terminal", self.toggle_terminal)]:
+            self._T(ctk.CTkButton(sec_cfg, text=self.tr(key), command=cmd, fg_color=st_mod.UI_PRIMARY,
+                                  height=st_mod.UI_BTN_H,
+                                  corner_radius=st_mod.UI_CARD_RADIUS), key).pack(fill="x", pady=2)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
     # ---- modelo ----
@@ -522,15 +594,8 @@ class App:
     def _on_net_change(self, online: bool):
         # viene de la hebra watcher: todo UI vía after (hilo principal)
         def _apply():
-            try:
-                if online:
-                    self.lbl_net.configure(text=self.tr(
-                        "net_online"), text_color="green")
-                else:
-                    self.lbl_net.configure(text=self.tr(
-                        "net_offline"), text_color="red")
-            except Exception:
-                pass
+            self._net_online = online
+            self._refresh_net_ui()
             self._toast(self.tr("net_reconnected_toast")
                         if online else self.tr("net_off_toast"))
         try:
@@ -699,10 +764,7 @@ class App:
             cl.flush()
         except Exception:  # noqa: BLE001
             pass
-        self.btn_measure.configure(
-            text=self.tr("measure_stop"), fg_color=st_mod.UI_STOP)
-        self.lbl_measure.configure(text=self.tr(
-            "measure_active"), text_color="red")
+        self._refresh_measure_ui()
         self._status(self.tr("measure_started_log"))
         self._toast(self.tr("measure_started_toast"))
 
@@ -745,10 +807,7 @@ class App:
                 self.sync_client.cancel_retry()
         except Exception:  # noqa: BLE001
             pass
-        self.btn_measure.configure(text=self.tr(
-            "measure_start"), fg_color=st_mod.UI_START)
-        self.lbl_measure.configure(text=self.tr(
-            "measure_idle"), text_color="gray")
+        self._refresh_measure_ui()
         total = sum(self.counts.values())
         self._status(self.tr("measure_done_log", total=total))
         self._toast(self.tr("measure_done_toast", total=total))
@@ -818,15 +877,27 @@ class App:
         e_name = ctk.CTkEntry(sec_device)
         e_name.insert(0, self.cfg.get("device_name", ""))
         e_name.pack(fill="x", padx=12)
-        ctk.CTkLabel(sec_device, text=self.tr("cfg_lang")).pack()
+        ctk.CTkLabel(sec_device, text=self.tr("cfg_lang")).pack(anchor="w")
         lang_names = dict(lng.LANGS)
         lang_var = ctk.StringVar(value=lang_names.get(
             self.lang, lang_names.get(lng.DEFAULT_LANG, list(lang_names.values())[0])))
         ctk.CTkOptionMenu(sec_device, variable=lang_var,
                           values=list(lang_names.values()),
-                          command=lambda _: None).pack(fill="x", padx=12)
+                          command=lambda _: None).pack(fill="x", padx=4)
         self._lang_var = lang_var
         self._lang_names = lang_names
+        ctk.CTkLabel(sec_device, text=self.tr("cfg_theme")).pack(anchor="w", pady=(6, 0))
+        theme_names = {"dark": self.tr("theme_dark"), "light": self.tr("theme_light"),
+                       "system": self.tr("theme_system")}
+        cur_theme = self.cfg.get("theme", st_mod.THEME_DEFAULT)
+        if cur_theme not in theme_names:
+            cur_theme = st_mod.THEME_DEFAULT
+        theme_var = ctk.StringVar(value=theme_names[cur_theme])
+        ctk.CTkOptionMenu(sec_device, variable=theme_var,
+                          values=list(theme_names.values()),
+                          command=lambda _: None).pack(fill="x", padx=4)
+        self._theme_var = theme_var
+        self._theme_names = theme_names
         sec_capture = _card("cfg_sec_capture")
 
         def row_slider(label, key, lo, hi, parent, fmt="{}"):
@@ -1078,6 +1149,12 @@ class App:
             new_lang = inv_lang.get(self._lang_var.get(), lng.DEFAULT_LANG)
             lang_changed = (new_lang != self.lang)
             self.cfg["lang"] = new_lang
+            inv_theme = {v: k for k, v in self._theme_names.items()}
+            new_theme = inv_theme.get(self._theme_var.get(), st_mod.THEME_DEFAULT)
+            if new_theme not in st_mod.THEMES:
+                new_theme = st_mod.THEME_DEFAULT
+            theme_changed = (new_theme != self.cfg.get("theme", st_mod.THEME_DEFAULT))
+            self.cfg["theme"] = new_theme
             new_persist = bool(var_persist.get())
             old_persist = bool(self.cfg.get("line_persistent", True))
             self.cfg["line_persistent"] = new_persist
@@ -1094,6 +1171,15 @@ class App:
             config_store.save(self.cfg)
             self._push_line_to_client()
             win.destroy()
+            # aplica idioma y tema en el acto (sin reiniciar)
+            if theme_changed:
+                try:
+                    ctk.set_appearance_mode(new_theme)
+                except Exception:
+                    pass
+            if lang_changed:
+                self.lang = new_lang
+                self.retranslate()
             # PATCH nombre en API si cambió y hay token (como la web)
             if self.cfg["device_name"] != old_name and self.cfg.get("token"):
                 new_name = self.cfg["device_name"]
@@ -1107,8 +1193,9 @@ class App:
                 threading.Thread(target=_rn, daemon=True).start()
             if self._reload_model(new_size):
                 self._toast(self.tr("cfg_saved_reload", size=new_size))
-            elif lang_changed:
-                self._toast(self.tr("lang_saved_toast"))
+            elif lang_changed or theme_changed:
+                self._toast(self.tr("lang_saved_toast") if lang_changed
+                            else self.tr("cfg_saved"))
             else:
                 self._toast(self.tr("cfg_saved"))
         ctk.CTkButton(win, text=self.tr("cfg_save"), command=_save,
@@ -1203,10 +1290,8 @@ def main(argv=None):
 
                 def _init_lbl(ok=_ok):
                     try:
-                        app.lbl_net.configure(
-                            text=app.tr("net_online") if ok else app.tr(
-                                "net_offline"),
-                            text_color="green" if ok else "red")
+                        app._net_online = ok
+                        app._refresh_net_ui()
                     except Exception:
                         pass
                 app.root.after(0, _init_lbl)

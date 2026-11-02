@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from konta2r import platform as pf
 
-# Idioma de la UI (código). Textos en strings.py.
+# Idioma y tema de la UI (códigos; textos en strings.py).
 LANG_DEFAULT = "es"
+THEMES = ("dark", "light", "system")
+THEME_DEFAULT = "dark"
 
 # ---- Rutas (derivan de platform; no reconstruir os.path en cada módulo) ----
 CONFIG_DIR = pf.config_dir()

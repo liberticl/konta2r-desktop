@@ -33,6 +33,7 @@ DEFAULTS = {
     "token": "",
     "fingerprint": "",
     "lang": st.LANG_DEFAULT,
+    "theme": st.THEME_DEFAULT,
 }
 
 

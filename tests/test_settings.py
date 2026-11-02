@@ -26,6 +26,9 @@ def test_rutas_centralizadas():
 
 def test_defaults_centralizados():
     d = config_store.DEFAULTS
+    assert d["lang"] == st.LANG_DEFAULT == "es"
+    assert d["theme"] == st.THEME_DEFAULT
+    assert tuple(st.THEMES) == ("dark", "light", "system")
     assert d["width"] == st.CAMERA_WIDTH_DEFAULT
     assert d["height"] == st.CAMERA_HEIGHT_DEFAULT
     assert d["model_size"] == st.MODEL_DEFAULT
