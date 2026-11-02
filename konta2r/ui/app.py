@@ -963,6 +963,34 @@ class App:
         e_addr = ctk.CTkEntry(
             sec_location, placeholder_text=self.tr("cfg_addr_ph"))
         e_addr.pack(fill="x", padx=12)
+        def _buscar():
+            lbl_geo_title.configure(text=self.tr("geo_searching"))
+            lbl_geo_coords.configure(text="")
+            lbl_geo_full.configure(text="")
+            btn_usar.configure(state="disabled")
+            self._geo_pending = None
+            addr = e_addr.get().strip()
+            if not addr:
+                lbl_geo_title.configure(text=self.tr("geo_empty"))
+                return
+
+            def _t():
+                try:
+                    lat, lon, name = geocode_mod.forward(addr)
+                    parts = [p.strip() for p in name.split(",")]
+                    short = ", ".join(parts[:2]) if len(
+                        parts) >= 2 else name[:80]
+                    self._geo_pending = (lat, lon, name)
+                    lbl_geo_title.configure(text=short[:90])
+                    lbl_geo_coords.configure(text=f"{lat}, {lon}")
+                    lbl_geo_full.configure(text=name[:220])
+                    btn_usar.configure(state="normal")
+                except Exception as exc:  # noqa: BLE001
+                    lbl_geo_title.configure(text=self.tr("geo_none"))
+                    lbl_geo_full.configure(text=str(exc)[:200])
+            threading.Thread(target=_t, daemon=True).start()
+        ctk.CTkButton(sec_location, text=self.tr("cfg_search"),
+                      command=_buscar).pack(fill="x", pady=(4, 0))
         card = ctk.CTkFrame(sec_location)
         card.pack(fill="x", padx=12, pady=6)
         lbl_geo_title = ctk.CTkLabel(card, text=self.tr("geo_idle"),
@@ -996,34 +1024,7 @@ class App:
             btn_usar.configure(state="disabled")
         btn_usar.configure(command=_confirm_geo)
 
-        def _buscar():
-            lbl_geo_title.configure(text=self.tr("geo_searching"))
-            lbl_geo_coords.configure(text="")
-            lbl_geo_full.configure(text="")
-            btn_usar.configure(state="disabled")
-            self._geo_pending = None
-            addr = e_addr.get().strip()
-            if not addr:
-                lbl_geo_title.configure(text=self.tr("geo_empty"))
-                return
 
-            def _t():
-                try:
-                    lat, lon, name = geocode_mod.forward(addr)
-                    parts = [p.strip() for p in name.split(",")]
-                    short = ", ".join(parts[:2]) if len(
-                        parts) >= 2 else name[:80]
-                    self._geo_pending = (lat, lon, name)
-                    lbl_geo_title.configure(text=short[:90])
-                    lbl_geo_coords.configure(text=f"{lat}, {lon}")
-                    lbl_geo_full.configure(text=name[:220])
-                    btn_usar.configure(state="normal")
-                except Exception as exc:  # noqa: BLE001
-                    lbl_geo_title.configure(text=self.tr("geo_none"))
-                    lbl_geo_full.configure(text=str(exc)[:200])
-            threading.Thread(target=_t, daemon=True).start()
-        ctk.CTkButton(sec_location, text=self.tr("cfg_search"),
-                      command=_buscar).pack(fill="x", pady=(4, 0))
         ctk.CTkLabel(sec_location, text=self.tr("cfg_coords")).pack(anchor="w")
         e_coords = ctk.CTkEntry(sec_location)
         e_coords.insert(0, self.cfg.get("coords", ""))
