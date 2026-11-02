@@ -390,6 +390,11 @@ STRINGS = {
                    "Sem tela (headless). Use uma sessão com desktop "
                    "ou X-forwarding, ou o modo sem GUI.",
                    "Error si no hay display en Linux."),
+    # ---- sections -----
+    "sec_counts": _s("Detecciones totales", "Total detections", "Detecções totais",
+                     "Sección de conteos totales en barra lateral"),
+    "sec_actions": _s("Acciones", "Actions", "Acciones",
+                      "Sección de acciones disponibles en barra lateral")
 }
 
 CLASS_NAMES = {
