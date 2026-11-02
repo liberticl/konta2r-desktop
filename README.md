@@ -33,7 +33,7 @@ Funciona tal cual en:
 
 | Caso | Alternativa |
 |---|---|
-| Raspberry Pi OS (ARM64) | Compilar nativo en la Pi (ver *Compilar*). El binario x86_64 no corre en ARM. |
+| Raspberry Pi OS (ARM64) | Ver sección *Raspberry Pi* más abajo (bundle ARM64, no usar el `.deb` x86_64). |
 | Distros musl (Alpine, postmarketOS) | Correr desde Python (ver abajo). |
 | 32 bits (i386/armhf) | Correr desde Python en equipo de 64 bits, o compilar nativo. |
 | Sin entorno gráfico | La app exige pantalla (Tk). En servidores, usar X-forwarding o una sesión con escritorio. |
@@ -71,6 +71,76 @@ cp /ruta/al/repo-web/.../mediciones/models/yolo26n.onnx models/
 # 6. Ejecutar
 python -m konta2r
 ```
+
+## Windows (10/11 de 64 bits)
+
+### Instalación con ejecutable
+
+1. Descarga `releases/windows/konta2r_vX.Y.Z.exe` (se publica solo
+   junto a cada release de GitHub; lo compila automáticamente
+   Actions en Windows real con Python 3.11).
+2. Doble clic para abrir. La primera vez, Windows SmartScreen puede
+   advertir porque el `.exe` no está firmado digitalmente:
+   *Más información → Ejecutar de todas formas*.
+3. No requiere instalación ni Python: lleva intérprete, modelo y
+   dependencias dentro. Los datos quedan en `%APPDATA%\konta2r\` y
+   fotos/videos/CSV en `%USERPROFILE%\konta2r\`.
+
+### Correr desde Python
+
+```powershell
+# 1. Instala Python 3.11 desde python.org (marca "Add python.exe to PATH";
+#    ya incluye Tcl/Tk, no hay que instalar nada extra para la ventana)
+# 2. En una terminal, desde la carpeta del repo:
+py -3.11 -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+mkdir models
+# 3. Modelos: cópialos del repo web o descárgalos (ver models/README.md):
+#    https://andeschileong.cl/recursos/mediciones/contador/model/?size=320
+#    https://andeschileong.cl/recursos/mediciones/contador/model/
+# 4. Ejecutar
+python -m konta2r
+```
+
+Notas Windows: requiere Windows 10/11 de 64 bits. Las cámaras se listan
+como `0 · Cámara 0`, etc. (nombres genéricos de DirectShow; opcional:
+`pip install pygrabber` para ver nombres reales). Si `onnxruntime` no
+carga por DLL faltante, instala *Microsoft Visual C++ Redistributable*
+(x64) y reintenta.
+
+## Raspberry Pi (ARM64, Raspberry Pi OS 64-bit)
+
+El `.deb` de Ubuntu **no sirve** en la Pi (x86_64 vs ARM64). Opciones:
+
+**A. Bundle ARM64** (cuando se publique en `releases/rpi/`):
+descomprime `konta2r-rpi-arm64.tar.gz` y ejecuta el binario `konta2r`.
+Es un onedir de PyInstaller compilado para aarch64, con todo incluido.
+
+**B. Compilar nativo en la Pi** (recomendado si el bundle no existe
+para tu versión):
+
+```bash
+# Raspberry Pi OS 64-bit con escritorio (Lite no sirve: no hay GUI)
+sudo apt install python3-tk python3-dev libgl1 build-essential
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-pi.txt   # wheels ARM64 (onnxruntime, headless cv2)
+# modelos en models/ (ver models/README.md) y luego:
+python -m konta2r
+```
+
+Notas Raspberry Pi (probado en Pi 4B):
+
+* **Usa siempre el modelo 320** (viene sugerido por defecto): el 640
+  da ~1–3 fps y el conteo deja de ser fiable (ver `models/README.md`).
+* Cierra otras aplicaciones: inferencia + video compiten por los
+  4 cores. Si grabas video, pon *Grabar 1 de cada N* en 2 o 3.
+* Cámara: las USB funcionan directo (V4L2, se listan con nombre).
+  El módulo de cámara oficial (Pi Camera) usa el stack libcamera y
+  **no** aparece como `/dev/video` clásico: para ese caso se
+  recomienda una webcam USB.
+* La primera ejecución genera fingerprint y registra el equipo igual
+  que en PC; sin internet queda encolado y sincroniza al reconectar.
 
 Config: Linux `~/.config/konta2r/config.json`, Windows `%APPDATA%/konta2r`.
 DB y log en la misma carpeta. Fotos/videos/CSV en `~/konta2r/`.
