@@ -62,12 +62,37 @@ en ese caso, bajar a 320.
 
 ## Origen de los archivos
 
-No se versionan en git por peso. Se copian desde el repo web:
+No se versionan en git por peso. Dos vías (mismo archivo):
+
+**a) Copia local** desde el repo web:
 
 ```bash
 cp /home/francisco/andeschileong/andeschileong-v2/apps/mediciones/static/mediciones/models/yolo26n-320.onnx models/
 cp /home/francisco/andeschileong/andeschileong-v2/apps/mediciones/static/mediciones/models/yolo26n.onnx models/
 ```
+
+**b) Descarga directa desde producción** (endpoint público, sin auth,
+el mismo que usa la app web en el navegador):
+
+```bash
+curl -o models/yolo26n-320.onnx "https://andeschileong.cl/recursos/mediciones/contador/model/?size=320"
+curl -o models/yolo26n.onnx "https://andeschileong.cl/recursos/mediciones/contador/model/"
+```
+
+Es seguro: HTTPS, sin credenciales y byte a byte idéntico a la copia
+local. Verifícalo con SHA256 tras descargar (si cambian un día los
+modelos en el servidor, el hash deja de coincidir y hay que revisar
+el cambio antes de usarlos):
+
+```
+yolo26n-320.onnx: 1e299e1bd3f4b1d5c1e5a4d230d5c337789e327379046b793626555288dd8dcc
+yolo26n.onnx:     3a8437d1c55d877ccc57137fcd17b37a65d36940314ca235a531df2e1084a655
+```
+
+OJO: `docs/api.md` del repo web documenta este endpoint como
+`/apps/mediciones/contador/model/` —esa ruta da **404**. La válida es
+`/recursos/mediciones/contador/model/?size=320|640` (verificado
+2026-11-01).
 
 Si falta el tamaño pedido al iniciar, la app usa el otro automáticamente
 y avisa con un toast (ver `infer.default_model_path`).
