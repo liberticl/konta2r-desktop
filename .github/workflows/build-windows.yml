@@ -1,0 +1,68 @@
+# Compila el .exe en Windows real y lo adjunta a la release.
+# Se dispara al publicar una release (p. ej. v0.1.0) o manualmente
+# desde la pestaña Actions (workflow_dispatch).
+name: build-windows
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versión X.Y.Z para el nombre del exe"
+        required: false
+        default: "0.1.0"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Modelos ONNX (descarga verificada)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path models | Out-Null
+          Invoke-WebRequest -Uri "https://andeschileong.cl/recursos/mediciones/contador/model/?size=320" -OutFile "models/yolo26n-320.onnx"
+          Invoke-WebRequest -Uri "https://andeschileong.cl/recursos/mediciones/contador/model/" -OutFile "models/yolo26n.onnx"
+          Get-FileHash models/yolo26n-320.onnx -Algorithm SHA256
+          Get-FileHash models/yolo26n.onnx -Algorithm SHA256
+
+      - name: Compilar con PyInstaller
+        run: pyinstaller --noconfirm build/konta2r.spec
+
+      - name: Renombrar artefacto
+        shell: pwsh
+        run: |
+          $ver = "${{ github.event.release.tag_name }}"
+          if (-not $ver) { $ver = "v${{ inputs.version }}" }
+          $ver = $ver -replace '^v',''
+          if (-not $ver) { $ver = "0.1.0" }
+          New-Item -ItemType Directory -Force -Path releases/windows | Out-Null
+          $exe = "releases/windows/konta2r_v$ver.exe"
+          Copy-Item "dist/konta2r/konta2r.exe" $exe
+          "KONTA2R_VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Subir artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: konta2r-windows
+          path: releases/windows/konta2r_v*.exe
+          if-no-files-found: error
+
+      - name: Adjuntar a la release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: releases/windows/konta2r_v*.exe
