@@ -7,9 +7,9 @@ API de andeschileong.cl (ver `docs/api.md` en el repo web).
 
 ## Instalación rápida en Ubuntu (recomendado)
 
-1. Descarga `konta2r_0.1.0_amd64.deb` (~120 MB, carpeta `build/` o releases).
+1. Descarga `releases/linux/konta2r_v0.1.0.deb` (~120 MB).
 2. Doble clic al `.deb` → se abre en el instalador de software → **Instalar**.
-   (Equivalente en terminal: `sudo apt install ./konta2r_0.1.0_amd64.deb`.)
+   (Equivalente en terminal: `sudo apt install ./releases/linux/konta2r_v0.1.0.deb`.)
 3. Abre **konta2r** desde el menú de aplicaciones (o doble clic al
    lanzador). La primera vez crea `~/.config/konta2r/` automáticamente.
 
@@ -96,12 +96,12 @@ pyinstaller build/konta2r.spec
 ./dist/konta2r/konta2r   # prueba: debe abrir la ventana y cargar el modelo
 
 # 4. Armar el .deb (requiere dpkg-deb; fakeroot opcional)
-./build/deb-build.sh            # genera build/konta2r_0.1.0_amd64.deb
+./build/deb-build.sh            # genera releases/linux/konta2r_v0.1.0.deb
 ./build/deb-build.sh 0.2.0      # con otra versión
 
 # 5. (Opcional) revisar contenido e instalar local
-dpkg-deb --contents build/konta2r_0.1.0_amd64.deb | head -30
-sudo apt install ./build/konta2r_0.1.0_amd64.deb
+dpkg-deb --contents releases/linux/konta2r_v0.1.0.deb | head -30
+sudo apt install ./releases/linux/konta2r_v0.1.0.deb
 ```
 
 Notas de compilación:

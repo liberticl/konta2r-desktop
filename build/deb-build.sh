@@ -9,6 +9,7 @@ cd "$(dirname "$0")/.."
 VERSION="${1:-0.1.0}"
 ARCH="amd64"
 PKG="konta2r_${VERSION}_${ARCH}"
+OUT="releases/linux/konta2r_v${VERSION}.deb"
 WORK="build/deb-pkg/${PKG}"
 
 [ -x dist/konta2r/konta2r ] || {
@@ -49,10 +50,10 @@ Description: Conteo de tránsito con visión artificial (cámara local)
 EOF
 
 if command -v fakeroot >/dev/null; then
-  fakeroot dpkg-deb --build "${WORK}" "build/${PKG}.deb"
+  fakeroot dpkg-deb --build "${WORK}" "${OUT}"
 else
-  dpkg-deb --build "${WORK}" "build/${PKG}.deb"
+  dpkg-deb --build "${WORK}" "${OUT}"
 fi
-echo "OK: build/${PKG}.deb"
-dpkg-deb --info "build/${PKG}.deb"
-dpkg-deb --contents "build/${PKG}.deb" | wc -l
+echo "OK: ${OUT}"
+dpkg-deb --info "${OUT}"
+dpkg-deb --contents "${OUT}" | wc -l
