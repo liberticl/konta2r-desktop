@@ -185,7 +185,7 @@ STRINGS = {
     "terminal_file": _s("Archivo: {path}", "File: {path}", "Arquivo: {path}",
                         "Etiqueta con la ruta del debug.log."),
     # ---- config ----
-    "config_title": _s("Configuracion", "Settings", "Configuração",
+    "config_title": _s("Configuración", "Settings", "Configuração",
                        "Título de la ventana de configuración."),
     "cfg_confidence": _s("Confianza", "Confidence", "Confiança",
                          "Slider umbral de confianza."),
