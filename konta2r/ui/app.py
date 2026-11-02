@@ -1191,12 +1191,12 @@ class App:
                     except Exception as exc:  # noqa: BLE001
                         self._status(self.tr("rename_fail", exc=exc))
                 threading.Thread(target=_rn, daemon=True).start()
-            if self._reload_model(new_size):
+            reloaded = self._reload_model(new_size)
+            if reloaded:
                 self._toast(self.tr("cfg_saved_reload", size=new_size))
-            elif lang_changed or theme_changed:
-                self._toast(self.tr("lang_saved_toast") if lang_changed
-                            else self.tr("cfg_saved"))
-            else:
+            if lang_changed:
+                self._toast(self.tr("lang_saved_toast", language=self._lang_var.get()))
+            if theme_changed or not reloaded:
                 self._toast(self.tr("cfg_saved"))
         ctk.CTkButton(win, text=self.tr("cfg_save"), command=_save,
                           fg_color=st_mod.UI_PRIMARY, height=st_mod.UI_BTN_HERO,

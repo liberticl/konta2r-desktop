@@ -57,6 +57,19 @@ def test_sin_texto_duro_en_ui_y_sync():
             assert f'"{frase}' not in src, f"{rel} hardcodea: {frase}"
 
 
+def test_placeholders_renderizan_en_tres_idiomas():
+    """Todo {param} debe formatearse sin choques (nunca usar {lang})."""
+    import re
+    for key, entry in lng.STRINGS.items():
+        params = set()
+        for lang in ("es", "en", "pt"):
+            params |= set(re.findall(r"\{(\w+)\}", entry[lang]))
+        assert "lang" not in params, f"{key} usa {{lang}}: colisiona con t()"
+        dummy = {p: "X" for p in params}
+        for lang in ("es", "en", "pt"):
+            assert lng.t(key, lang, **dummy), f"{key}/{lang} no renderiza"
+
+
 def test_sin_hardcode_en_idioma_por_defecto():
     """El idioma por defecto también sale de strings (no 'es' suelto)."""
     import pathlib
