@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="konta2r icono app lente">
+  <title>konta2r — Icono app oficial (solo icono, sin wordmark)</title>
+  <rect x="0" y="0" width="256" height="256" rx="56" fill="#245A91"/>
+  <circle cx="128" cy="128" r="78" fill="none" stroke="#FFFFFF" stroke-width="16"/>
+  <circle cx="128" cy="128" r="52" fill="none" stroke="#9C7C3C" stroke-width="5"/>
+  <rect x="96" y="72" width="26" height="112" rx="13" fill="#FFFFFF"/>
+  <line x1="109" y1="128" x2="168" y2="78" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round"/>
+  <line x1="109" y1="128" x2="178" y2="186" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round"/>
+  <polygon points="198,202 170,194 186,176" fill="#A6192E" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round"/>
+  <circle cx="109" cy="128" r="10" fill="#0A2A4A"/>
+  <circle cx="112.5" cy="124.5" r="2.5" fill="#FFFFFF"/>
+</svg>

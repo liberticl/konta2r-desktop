@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 320" role="img" aria-label="konta2r propuesta 7 - lente">
+  <title>konta2r — Logo oficial (lockup con wordmark)</title>
+  <!-- LOGO OFICIAL adoptado nov-2026. Paleta institucional PUCV + Andes:
+       fondo #245A91 (PUCV 2945 U), K+anillo blancos (monocromo s/norma PUCV),
+       flecha #A6192E (PUCV 1807 digital), aro #9C7C3C (dorado 873 aprox.),
+       lente #0A2A4A (pupila + brillo: reflejo arriba-izquierda por convención),
+       wordmark "konta" #2241A8 (marca andeschileong.cl) + "2r" rojo PUCV.
+       Geometría: solo primitivas SVG (rect, circle, line, polygon, text Arial).
+       Regenerar PNG con inkscape desde konta2r-icon.svg (exportar a 512 y 48 px). -->
+  <rect x="0" y="0" width="256" height="256" rx="56" fill="#245A91"/>
+  <circle cx="128" cy="126" r="78" fill="none" stroke="#FFFFFF" stroke-width="16"/>
+  <circle cx="128" cy="126" r="52" fill="none" stroke="#9C7C3C" stroke-width="5"/>
+  <rect x="96" y="70" width="26" height="112" rx="13" fill="#FFFFFF"/>
+  <line x1="109" y1="126" x2="168" y2="76" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round"/>
+  <line x1="109" y1="126" x2="178" y2="184" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round"/>
+  <polygon points="198,200 170,192 186,174" fill="#A6192E" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round"/>
+  <!-- lente: pupila oscura + brillo, inscrita en el mástil -->
+  <circle cx="109" cy="126" r="10" fill="#0A2A4A"/>
+  <circle cx="112.5" cy="122.5" r="2.5" fill="#FFFFFF"/>
+  <g font-family="Arial, Helvetica, sans-serif" text-anchor="middle">
+    <text x="128" y="292" font-size="34" font-weight="bold" letter-spacing="0.5"><tspan fill="#2241A8">konta</tspan><tspan fill="#A6192E">2r</tspan></text>
+    <text x="128" y="308" font-size="10.5" fill="#6C757D" letter-spacing="0.4">Andes Chile ONG · PUCV · Ariel López</text>
+  </g>
+</svg>
