@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=konta2r
+GenericName=Traffic counter
+Comment=Conteo de tránsito con visión artificial (cámara local)
+Exec=/usr/bin/konta2r %U
+Icon=konta2r
+Terminal=false
+Categories=Science;Engineering;
+Keywords=traffic;conteo;transito;vision;
+StartupWMClass=konta2r

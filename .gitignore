@@ -7,3 +7,7 @@ build-out/
 *.db
 config.json
 .python-version
+# Paquete/instalador (se generan, no se versionan)
+*.deb
+build/deb-pkg/
+build/konta2r/
