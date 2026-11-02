@@ -335,12 +335,16 @@ class App:
         self._ui_after(_show)
 
     def _toast(self, msg, ms: int = 2500):
-        """Notificación push in-app: popup que se autocierra."""
+        """Notificación push in-app: popup que se autocierra (según tema)."""
         try:
-            t = ctk.CTkToplevel(self.root, fg_color="#1f2937")
+            dark = ctk.get_appearance_mode() != "Light"
+            bg = "#1f2937" if dark else "#ffffff"
+            fg = "#f9fafb" if dark else "#111827"
+            t = ctk.CTkToplevel(self.root, fg_color=bg)
             t.overrideredirect(True)
             t.attributes("-topmost", True)
             lbl = ctk.CTkLabel(t, text=msg, wraplength=300, justify="left",
+                               text_color=fg,
                                font=(st_mod.UI_FONT, st_mod.UI_BODY))
             lbl.pack(padx=16, pady=12)
             try:
