@@ -93,5 +93,23 @@ TRACK_IOU_WEIGHT = 80       # score = dist - IoU * peso
 DEBUG_HOST = "http://localhost"
 DEBUG_PORT_DEFAULT = "8000"
 
+# ---- Tema UI (único lugar para la estética; solo visual, sin lógica) ----
+# Paleta sobria sobre el modo oscuro de CustomTkinter.
+UI_PRIMARY = "#2563eb"   # acciones principales (Guardar, enlaces clave)
+UI_START = "#16a34a"     # iniciar medición
+UI_STOP = "#dc2626"      # finalizar / grabar activo
+UI_WARN = "#ea580c"      # debug activo, avisos
+UI_MUTED = "gray"        # textos secundarios y hints
+UI_FONT = "Arial"        # fallback nativo si no hay otra
+UI_TITLE = 13            # títulos de tarjetas
+UI_SECTION = 12          # títulos de sección lateral
+UI_BODY = 13             # texto normal (default CTk)
+UI_SMALL = 11            # hints y notas
+UI_VALUE = 16            # números de conteo
+UI_CARD_RADIUS = 10      # esquinas de tarjetas
+UI_CARD_BORDER = 1       # borde sutil de tarjetas
+UI_BTN_H = 28            # alto estándar de botones
+UI_BTN_HERO = 40         # alto del botón principal (medición/guardar)
+
 # ---- Sesión ----
 SESSION_PREFIX = "sesion_"

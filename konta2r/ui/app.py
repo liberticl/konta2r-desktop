@@ -91,7 +91,8 @@ class App:
         self.cam_var = None
         self.cam_menu = None
         self._cfg_cam_menu = None
-        self.disp_w, self.disp_h = st_mod.DISPLAY_W_DEFAULT, st_mod.DISPLAY_H_DEFAULT  # se ajusta al canvas real
+        # se ajusta al canvas real
+        self.disp_w, self.disp_h = st_mod.DISPLAY_W_DEFAULT, st_mod.DISPLAY_H_DEFAULT
         self.lbl_net = None
         self.frame, self.disp_boxes = None, []
         self.recording, self.writer = False, None
@@ -121,27 +122,37 @@ class App:
         side = ctk.CTkScrollableFrame(body, width=280)
         side.pack(side="right", fill="y", padx=(6, 0))
 
-        def _section(title_key):
-            box = ctk.CTkFrame(side)
+        def _section(title_key=None):
+            box = ctk.CTkFrame(side, corner_radius=st_mod.UI_CARD_RADIUS,
+                               border_width=st_mod.UI_CARD_BORDER)
             box.pack(fill="x", padx=2, pady=(0, 8))
-            ctk.CTkLabel(box, text=self.tr(title_key),
-                         font=("Arial", 12, "bold")).pack(anchor="w", padx=10, pady=(8, 2))
+            if title_key:
+                ctk.CTkLabel(box, text=self.tr(title_key),
+                             font=(st_mod.UI_FONT, st_mod.UI_SECTION, "bold")).pack(
+                                 anchor="w", padx=10, pady=(8, 2))
             inner = ctk.CTkFrame(box, fg_color="transparent")
             inner.pack(fill="x", padx=10, pady=(0, 10))
             return inner
 
-        sec_measure = _section("sec_measure")
-        self.lbl_measure = ctk.CTkLabel(sec_measure, text=self.tr("measure_idle"), text_color="gray")
-        self.lbl_measure.pack(anchor="w", pady=(0, 2))
-        self.btn_measure = ctk.CTkButton(sec_measure, text=self.tr("measure_start"),
-                                         fg_color="green", command=self.toggle_measure,
-                                         height=36)
-        self.btn_measure.pack(fill="x", pady=(2, 4))
-        self.lbl_net = ctk.CTkLabel(sec_measure, text=self.tr("net_unknown"), text_color="gray")
+        # Network
+        sec_network = _section()
+        self.lbl_net = ctk.CTkLabel(
+            sec_network, text=self.tr("net_unknown"), text_color="gray")
         self.lbl_net.pack(anchor="w", pady=(0, 2))
+
+        # Count status
+        sec_measure = _section()
+        self.btn_measure = ctk.CTkButton(sec_measure, text=self.tr("measure_start"),
+                                         fg_color=st_mod.UI_START, command=self.toggle_measure,
+                                         height=st_mod.UI_BTN_HERO, corner_radius=st_mod.UI_CARD_RADIUS,
+                                         font=(st_mod.UI_FONT, st_mod.UI_TITLE, "bold"))
+        self.btn_measure.pack(fill="x", pady=(2, 4))
+        self.lbl_measure = ctk.CTkLabel(
+                    sec_measure, text=self.tr("measure_idle"), text_color="gray")
+        self.lbl_measure.pack(anchor="w", pady=(0, 2))
+
         # selector de cámara con nombre, solo disponibles
-        sec_cam = _section("sec_camera")
-        ctk.CTkLabel(sec_cam, text=self.tr("camera_label")).pack(anchor="w")
+        sec_cam = _section("camera_label")
         self.cam_options: dict[str, int] = {}
         self.cam_var = ctk.StringVar(value="")
         try:
@@ -152,7 +163,8 @@ class App:
         for i, nm in cams:
             self.cam_options[camera_label(i, nm)] = i
         cur_idx = int(self.cfg.get("camera_index", 0))
-        cur_label = next((lb for lb, ix in self.cam_options.items() if ix == cur_idx), None)
+        cur_label = next(
+            (lb for lb, ix in self.cam_options.items() if ix == cur_idx), None)
         if cur_label is None:
             # configurada no disponible (desconectada): solo disponibles
             cur_label = next(iter(self.cam_options), "0")
@@ -167,25 +179,37 @@ class App:
         self.cam_menu.pack(fill="x", pady=(0, 4))
         ctk.CTkButton(sec_cam, text=self.tr("reload_cameras"),
                       command=self._refresh_cameras).pack(fill="x", pady=(4, 0))
+
+        # Detecciones
         sec_count = _section("sec_counts")
         self.count_labels = {}
         for k in KEYS:
-            row = ctk.CTkFrame(sec_count)
-            row.pack(fill="x", pady=1)
-            ctk.CTkLabel(row, text=self.labels[k], width=110).pack(side="left")
-            lbl = ctk.CTkLabel(row, text="0", width=60)
-            lbl.pack(side="left")
+            row = ctk.CTkFrame(sec_count, fg_color="transparent")
+            row.pack(fill="x", pady=2)
+            ctk.CTkLabel(row, text=self.labels[k], width=110, anchor="w",
+                         text_color=st_mod.UI_MUTED).pack(side="left")
+            lbl = ctk.CTkLabel(row, text="0", width=60, anchor="e",
+                               font=(st_mod.UI_FONT, st_mod.UI_VALUE, "bold"))
+            lbl.pack(side="right")
             self.count_labels[k] = lbl
+
+        # Acciones
         sec_act = _section("sec_actions")
         for txt, cmd in [(self.tr("btn_record"), self.toggle_record),
                          (self.tr("btn_photo"), self.save_photo),
                          (self.tr("btn_csv"), self.save_csv),
                          (self.tr("btn_line"), self.toggle_line)]:
-            ctk.CTkButton(sec_act, text=txt, command=cmd).pack(fill="x", pady=2)
-        sec_cfg = _section("sec_settings")
+            ctk.CTkButton(sec_act, text=txt, command=cmd,
+                          height=st_mod.UI_BTN_H,
+                          corner_radius=st_mod.UI_CARD_RADIUS).pack(fill="x", pady=2)
+
+        # Config
+        sec_cfg = _section()
         for txt, cmd in [(self.tr("btn_config"), self.open_config),
                          (self.tr("btn_terminal"), self.toggle_terminal)]:
-            ctk.CTkButton(sec_cfg, text=txt, command=cmd).pack(fill="x", pady=2)
+            ctk.CTkButton(sec_cfg, text=txt, command=cmd, fg_color=st_mod.UI_PRIMARY,
+                          height=st_mod.UI_BTN_H,
+                          corner_radius=st_mod.UI_CARD_RADIUS).pack(fill="x", pady=2)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
     # ---- modelo ----
@@ -199,7 +223,8 @@ class App:
                     return
                 want = st_mod.MODEL_FILES.get(int(self.model_size), "")
                 if want and os.path.basename(path) != want:
-                    self._status(self.tr("model_fallback", size=self.model_size, other=os.path.basename(path)))
+                    self._status(
+                        self.tr("model_fallback", size=self.model_size, other=os.path.basename(path)))
                 self.sess = infer_mod.Session(path)
                 self._status(self.tr("model_ready", size=self.model_size))
                 self._toast(self.tr("model_ready", size=self.model_size))
@@ -240,11 +265,12 @@ class App:
     def _toast(self, msg, ms: int = 2500):
         """Notificación push in-app: popup que se autocierra."""
         try:
-            t = ctk.CTkToplevel(self.root)
+            t = ctk.CTkToplevel(self.root, fg_color="#1f2937")
             t.overrideredirect(True)
             t.attributes("-topmost", True)
-            lbl = ctk.CTkLabel(t, text=msg, wraplength=300, justify="left")
-            lbl.pack(padx=14, pady=10)
+            lbl = ctk.CTkLabel(t, text=msg, wraplength=300, justify="left",
+                               font=(st_mod.UI_FONT, st_mod.UI_BODY))
+            lbl.pack(padx=16, pady=12)
             try:
                 t.update_idletasks()
                 x = self.root.winfo_x() + self.root.winfo_width() - t.winfo_reqwidth() - 20
@@ -264,12 +290,14 @@ class App:
             except Exception:  # noqa: BLE001
                 cams = []
             names = ", ".join(camera_label(i, n) for i, n in cams) or "ninguna"
-            self._status(self.tr("cam_unavailable", index=self.cam.index, names=names))
+            self._status(self.tr("cam_unavailable",
+                         index=self.cam.index, names=names))
             self._toast(self.tr("toast_no_camera"))
             self.running = False
             return
         if getattr(self, "_status_pending_cam", None) is not None:
-            self._status(self.tr("cam_moved", old=self._status_pending_cam, new=self.cam.index))
+            self._status(
+                self.tr("cam_moved", old=self._status_pending_cam, new=self.cam.index))
             self._status_pending_cam = None
         self.running = True
         threading.Thread(target=self._loop, daemon=True).start()
@@ -293,7 +321,8 @@ class App:
             except Exception:  # noqa: BLE001
                 time.sleep(0.05)
                 continue
-            dets = infer_mod.parse_output0(raw, conf, self.cfg.get("clases_activas"))
+            dets = infer_mod.parse_output0(
+                raw, conf, self.cfg.get("clases_activas"))
             h, w = frame.shape[:2]
             disp_w, disp_h = self.disp_w, self.disp_h
             boxes, now = [], int(time.time() * 1000)
@@ -319,7 +348,8 @@ class App:
             if self.recording and self.writer is not None:
                 try:
                     self._rec_count += 1
-                    every = max(1, int(self.cfg.get("record_every_n", st_mod.RECORD_EVERY_N_DEFAULT)))
+                    every = max(
+                        1, int(self.cfg.get("record_every_n", st_mod.RECORD_EVERY_N_DEFAULT)))
                     if self._rec_count % every == 0:
                         self.writer.write(self._overlay(frame.copy()))
                 except Exception:  # noqa: BLE001
@@ -418,8 +448,13 @@ class App:
                 txt = self.tr("line_overlay_start")
             else:
                 txt = self.tr("line_overlay_second")
-            self.canvas.create_text(disp_w / 2, 30, text=txt, fill="white",
-                                    font=("Arial", 16))
+            _hint = self.canvas.create_text(disp_w / 2, 30, text=txt, fill="white",
+                                        font=(st_mod.UI_FONT, 16))
+            _bb = self.canvas.bbox(_hint)
+            if _bb:
+                _bg = self.canvas.create_rectangle(_bb[0] - 10, _bb[1] - 6, _bb[2] + 10, _bb[3] + 6,
+                                                   fill="black", width=0)
+                self.canvas.tag_lower(_bg, _hint)
         if len(self.line_pts) == 1 and self.line_mode and self.mouse_pos:
             (x1, y1) = self.line_pts[0]
             self.canvas.create_line(x1, y1, self.mouse_pos[0], self.mouse_pos[1],
@@ -427,10 +462,12 @@ class App:
         if line:
             sx, sy = line["start"]["x"], line["start"]["y"]
             ex, ey = line["end"]["x"], line["end"]["y"]
-            self.canvas.create_line(sx, sy, ex, ey, fill="red", width=3, dash=(8, 6))
+            self.canvas.create_line(
+                sx, sy, ex, ey, fill="red", width=3, dash=(8, 6))
             # vértices rojos + etiquetas A/B por LADO (mitad -1=A, +1=B), como v2
             for px, py in ((sx, sy), (ex, ey)):
-                self.canvas.create_oval(px - 5, py - 5, px + 5, py + 5, fill="red", width=0)
+                self.canvas.create_oval(
+                    px - 5, py - 5, px + 5, py + 5, fill="red", width=0)
             dx, dy = ex - sx, ey - sy
             import math as _math
             ln = _math.hypot(dx, dy)
@@ -442,7 +479,7 @@ class App:
                 for s, tag in ((-1, "A"), (1, "B")):
                     px, py = mx + nx * 46 * s, my + ny * 46 * s
                     self.canvas.create_oval(px - 16, py - 16, px + 16, py + 16,
-                                            fill="black", width=0)
+                                            fill="black", outline="white", width=2)
                     self.canvas.create_text(px, py, text=tag, fill="white",
                                             font=("Arial", 16, "bold"))
                     nm = sides["a"] if s < 0 else sides["b"]
@@ -472,7 +509,8 @@ class App:
                             "x2": x2 / self.disp_w, "y2": y2 / self.disp_h})
             self.line_mode = False
             self.line_pts = []
-            self._toast(self.tr("line_saved_persistent") if self.cfg.get("line_persistent", True) else self.tr("line_saved_session"))
+            self._toast(self.tr("line_saved_persistent") if self.cfg.get(
+                "line_persistent", True) else self.tr("line_saved_session"))
 
     def _on_canvas_move(self, ev):
         self.mouse_pos = (ev.x, ev.y)
@@ -486,12 +524,15 @@ class App:
         def _apply():
             try:
                 if online:
-                    self.lbl_net.configure(text=self.tr("net_online"), text_color="green")
+                    self.lbl_net.configure(text=self.tr(
+                        "net_online"), text_color="green")
                 else:
-                    self.lbl_net.configure(text=self.tr("net_offline"), text_color="red")
+                    self.lbl_net.configure(text=self.tr(
+                        "net_offline"), text_color="red")
             except Exception:
                 pass
-            self._toast(self.tr("net_reconnected_toast") if online else self.tr("net_off_toast"))
+            self._toast(self.tr("net_reconnected_toast")
+                        if online else self.tr("net_off_toast"))
         try:
             self.root.after(0, _apply)
         except Exception:
@@ -532,7 +573,8 @@ class App:
             first = next(iter(self.cam_options))
             self.cam_var.set(first)
             return
-        self._status(self.tr("cam_list", cams=[f'{i}' for i in self.avail_cams]))
+        self._status(self.tr("cam_list", cams=[
+                     f'{i}' for i in self.avail_cams]))
 
     def _switch_camera(self, choice):
         idx = label_to_index(choice)
@@ -545,7 +587,8 @@ class App:
         except Exception:  # noqa: BLE001
             pass
         time.sleep(0.15)
-        self.cam = Camera(idx, self.cfg.get("width", st_mod.CAMERA_WIDTH_DEFAULT), self.cfg.get("height", st_mod.CAMERA_HEIGHT_DEFAULT))
+        self.cam = Camera(idx, self.cfg.get("width", st_mod.CAMERA_WIDTH_DEFAULT), self.cfg.get(
+            "height", st_mod.CAMERA_HEIGHT_DEFAULT))
         self.cfg["camera_index"] = idx
         config_store.save(self.cfg)
         self.tracker.reset()
@@ -569,7 +612,8 @@ class App:
         else:
             self.line_mode = not self.line_mode
             self.line_pts = []
-            self._status(self.tr("line_mode_on") if self.line_mode else self.tr("line_mode_off"))
+            self._status(self.tr("line_mode_on")
+                         if self.line_mode else self.tr("line_mode_off"))
 
     def toggle_measure(self):
         if not self.measuring:
@@ -650,12 +694,15 @@ class App:
         self.measuring = True
         try:
             cl = self._ensure_sync_client()
-            cl.schedule_periodic(float(self.cfg.get("sync_interval_min", st_mod.SYNC_INTERVAL_DEFAULT)))
+            cl.schedule_periodic(
+                float(self.cfg.get("sync_interval_min", st_mod.SYNC_INTERVAL_DEFAULT)))
             cl.flush()
         except Exception:  # noqa: BLE001
             pass
-        self.btn_measure.configure(text=self.tr("measure_stop"), fg_color="red")
-        self.lbl_measure.configure(text=self.tr("measure_active"), text_color="red")
+        self.btn_measure.configure(
+            text=self.tr("measure_stop"), fg_color=st_mod.UI_STOP)
+        self.lbl_measure.configure(text=self.tr(
+            "measure_active"), text_color="red")
         self._status(self.tr("measure_started_log"))
         self._toast(self.tr("measure_started_toast"))
 
@@ -671,7 +718,8 @@ class App:
                      wraplength=320).pack()
         ctk.CTkLabel(win, text=code,
                      font=("Courier", 28, "bold")).pack(pady=4)
-        entry = ctk.CTkEntry(win, placeholder_text=self.tr("finish_code_ph"), justify="center")
+        entry = ctk.CTkEntry(win, placeholder_text=self.tr(
+            "finish_code_ph"), justify="center")
         entry.pack(pady=4)
         err = ctk.CTkLabel(win, text="", text_color="red")
         err.pack()
@@ -683,7 +731,7 @@ class App:
                 self._finish_measure()
             else:
                 err.configure(text=self.tr("finish_wrong"))
-        ctk.CTkButton(win, text=self.tr("finish_ok"), fg_color="red",
+        ctk.CTkButton(win, text=self.tr("finish_ok"), fg_color=st_mod.UI_STOP,
                       command=_ok).pack(pady=4)
         ctk.CTkButton(win, text=self.tr("finish_cancel"),
                       command=win.destroy).pack()
@@ -697,8 +745,10 @@ class App:
                 self.sync_client.cancel_retry()
         except Exception:  # noqa: BLE001
             pass
-        self.btn_measure.configure(text=self.tr("measure_start"), fg_color="green")
-        self.lbl_measure.configure(text=self.tr("measure_idle"), text_color="gray")
+        self.btn_measure.configure(text=self.tr(
+            "measure_start"), fg_color=st_mod.UI_START)
+        self.lbl_measure.configure(text=self.tr(
+            "measure_idle"), text_color="gray")
         total = sum(self.counts.values())
         self._status(self.tr("measure_done_log", total=total))
         self._toast(self.tr("measure_done_toast", total=total))
@@ -707,15 +757,18 @@ class App:
         if not self.recording:
             fourcc = cv2.VideoWriter_fourcc(*st_mod.RECORD_FOURCC)
             path = self._media_path("grabacion_konta2r", "mp4")
-            every = max(1, int(self.cfg.get("record_every_n", st_mod.RECORD_EVERY_N_DEFAULT)))
+            every = max(
+                1, int(self.cfg.get("record_every_n", st_mod.RECORD_EVERY_N_DEFAULT)))
             base = self._loop_fps if self._loop_fps > 0.5 else st_mod.RECORD_FPS
-            fps = min(60.0, max(1.0, base / every))  # 1:1 con la velocidad real
+            # 1:1 con la velocidad real
+            fps = min(60.0, max(1.0, base / every))
             self._rec_count = 0
             h, w = (self.frame.shape[:2] if self.frame is not None
                     else (st_mod.CAMERA_HEIGHT_DEFAULT, st_mod.CAMERA_WIDTH_DEFAULT))
             self.writer = cv2.VideoWriter(path, fourcc, fps, (w, h))
             self.recording = True
-            self._toast(self.tr("start_record_toast", every=every, fps=f"{fps:.1f}"))
+            self._toast(self.tr("start_record_toast",
+                        every=every, fps=f"{fps:.1f}"))
             self._status(self.tr("record_started"))
         else:
             self.recording = False
@@ -750,12 +803,14 @@ class App:
         scroll.pack(fill="both", expand=True, padx=8, pady=8)
 
         def _card(title_key):
-            box = ctk.CTkFrame(scroll)
+            box = ctk.CTkFrame(scroll, corner_radius=st_mod.UI_CARD_RADIUS,
+                               border_width=st_mod.UI_CARD_BORDER)
             box.pack(fill="x", padx=4, pady=6)
             ctk.CTkLabel(box, text=self.tr(title_key),
-                         font=("Arial", 13, "bold")).pack(anchor="w", padx=10, pady=(8, 2))
+                         font=(st_mod.UI_FONT, st_mod.UI_TITLE, "bold")).pack(
+                             anchor="w", padx=12, pady=(10, 2))
             inner = ctk.CTkFrame(box, fg_color="transparent")
-            inner.pack(fill="x", padx=10, pady=(0, 10))
+            inner.pack(fill="x", padx=12, pady=(0, 12))
             return inner
 
         sec_device = _card("cfg_sec_device")
@@ -765,7 +820,8 @@ class App:
         e_name.pack(fill="x", padx=12)
         ctk.CTkLabel(sec_device, text=self.tr("cfg_lang")).pack()
         lang_names = dict(lng.LANGS)
-        lang_var = ctk.StringVar(value=lang_names.get(self.lang, lang_names.get(lng.DEFAULT_LANG, list(lang_names.values())[0])))
+        lang_var = ctk.StringVar(value=lang_names.get(
+            self.lang, lang_names.get(lng.DEFAULT_LANG, list(lang_names.values())[0])))
         ctk.CTkOptionMenu(sec_device, variable=lang_var,
                           values=list(lang_names.values()),
                           command=lambda _: None).pack(fill="x", padx=12)
@@ -780,13 +836,15 @@ class App:
             val.pack(anchor="w")
 
             def _cb(v):
-                self.cfg[key] = round(float(v), 2) if isinstance(self.cfg.get(key), float) else int(float(v))
+                self.cfg[key] = round(float(v), 2) if isinstance(
+                    self.cfg.get(key), float) else int(float(v))
                 val.configure(text=fmt.format(self.cfg[key]))
             ctk.CTkSlider(parent, from_=lo, to=hi, variable=var,
                           command=_cb).pack(fill="x", pady=(0, 6))
         # selector de cámara en config: usa la lista ya conocida (no reabre
         # la cámara en uso; para detectar nuevas usa ↻ Recargar cámaras)
-        ctk.CTkLabel(sec_capture, text=self.tr("camera_label")).pack(anchor="w")
+        ctk.CTkLabel(sec_capture, text=self.tr(
+            "camera_label")).pack(anchor="w")
         opts_cfg = dict(self.cam_options) or {self.tr("no_cameras"): -1}
         cur_cfg = next((lb for lb, ix in opts_cfg.items()
                         if ix == int(self.cfg.get("camera_index", 0))), next(iter(opts_cfg)))
@@ -801,27 +859,34 @@ class App:
             except Exception:  # noqa: BLE001
                 pass
         self._cfg_cam_menu = ctk.CTkOptionMenu(sec_capture, variable=cam_var_cfg,
-                          values=list(opts_cfg),
-                          command=_cfg_cam)
+                                               values=list(opts_cfg),
+                                               command=_cfg_cam)
         self._cfg_cam_menu.pack(fill="x", padx=12)
         ctk.CTkButton(sec_capture, text=self.tr("reload_cameras"),
                       command=self._refresh_cameras).pack(fill="x", pady=(4, 0))
-        row_slider(self.tr("cfg_confidence"), "conf_threshold", st_mod.CONF_MIN, st_mod.CONF_MAX, sec_capture)
-        row_slider(self.tr("cfg_sync"), "sync_interval_min", 1, 60, sec_capture)
-        row_slider(self.tr("cfg_model"), "model_size", st_mod.MODEL_SIZES[0], st_mod.MODEL_SIZES[1], sec_capture)
-        row_slider(self.tr("cfg_record_n"), "record_every_n", 1, st_mod.RECORD_EVERY_N_MAX, sec_capture)
+        row_slider(self.tr("cfg_confidence"), "conf_threshold",
+                   st_mod.CONF_MIN, st_mod.CONF_MAX, sec_capture)
+        row_slider(self.tr("cfg_sync"),
+                   "sync_interval_min", 1, 60, sec_capture)
+        row_slider(self.tr("cfg_model"), "model_size",
+                   st_mod.MODEL_SIZES[0], st_mod.MODEL_SIZES[1], sec_capture)
+        row_slider(self.tr("cfg_record_n"), "record_every_n",
+                   1, st_mod.RECORD_EVERY_N_MAX, sec_capture)
         sec_classes = _card("cfg_classes")
         self._cls_vars = {}
         for k in KEYS:
-            v = ctk.BooleanVar(value=bool(self.cfg["clases_activas"].get(k, True)))
+            v = ctk.BooleanVar(value=bool(
+                self.cfg["clases_activas"].get(k, True)))
             self._cls_vars[k] = v
-            ctk.CTkCheckBox(sec_classes, text=self.labels[k], variable=v).pack(anchor="w", padx=4, pady=1)
-
+            ctk.CTkCheckBox(sec_classes, text=self.labels[k], variable=v).pack(
+                anchor="w", padx=4, pady=1)
 
         # dirección -> coords vía Nominatim gratuita (con confirmación)
         sec_location = _card("cfg_sec_location")
-        ctk.CTkLabel(sec_location, text=self.tr("cfg_address")).pack(anchor="w")
-        e_addr = ctk.CTkEntry(sec_location, placeholder_text=self.tr("cfg_addr_ph"))
+        ctk.CTkLabel(sec_location, text=self.tr(
+            "cfg_address")).pack(anchor="w")
+        e_addr = ctk.CTkEntry(
+            sec_location, placeholder_text=self.tr("cfg_addr_ph"))
         e_addr.pack(fill="x", padx=12)
         card = ctk.CTkFrame(sec_location)
         card.pack(fill="x", padx=12, pady=6)
@@ -835,7 +900,8 @@ class App:
         lbl_geo_full = ctk.CTkLabel(card, text="", wraplength=360, justify="left",
                                     text_color="gray", font=("Arial", 11))
         lbl_geo_full.pack(anchor="w", padx=8, pady=(0, 6))
-        btn_usar = ctk.CTkButton(card, text=self.tr("btn_use_coords"), state="disabled")
+        btn_usar = ctk.CTkButton(card, text=self.tr(
+            "btn_use_coords"), state="disabled")
         btn_usar.pack(fill="x", padx=8, pady=(0, 8))
         self._geo_pending = None
 
@@ -870,7 +936,8 @@ class App:
                 try:
                     lat, lon, name = geocode_mod.forward(addr)
                     parts = [p.strip() for p in name.split(",")]
-                    short = ", ".join(parts[:2]) if len(parts) >= 2 else name[:80]
+                    short = ", ".join(parts[:2]) if len(
+                        parts) >= 2 else name[:80]
                     self._geo_pending = (lat, lon, name)
                     lbl_geo_title.configure(text=short[:90])
                     lbl_geo_coords.configure(text=f"{lat}, {lon}")
@@ -890,21 +957,25 @@ class App:
         #              text_color="gray").pack()
         sec_line = _card("cfg_line_section")
         ctk.CTkLabel(sec_line, text=self.tr("cfg_side_a")).pack(anchor="w")
-        e_side_a = ctk.CTkEntry(sec_line, placeholder_text=self.tr("cfg_side_a_ph"))
+        e_side_a = ctk.CTkEntry(
+            sec_line, placeholder_text=self.tr("cfg_side_a_ph"))
         e_side_a.insert(0, self.cfg.get("side_a", ""))
         e_side_a.pack(fill="x", padx=12)
         ctk.CTkLabel(sec_line, text=self.tr("cfg_side_b")).pack(anchor="w")
-        e_side_b = ctk.CTkEntry(sec_line, placeholder_text=self.tr("cfg_side_b_ph"))
+        e_side_b = ctk.CTkEntry(
+            sec_line, placeholder_text=self.tr("cfg_side_b_ph"))
         e_side_b.insert(0, self.cfg.get("side_b", ""))
         e_side_b.pack(fill="x", padx=12)
-        var_persist = ctk.BooleanVar(value=bool(self.cfg.get("line_persistent", True)))
+        var_persist = ctk.BooleanVar(value=bool(
+            self.cfg.get("line_persistent", True)))
         ctk.CTkCheckBox(sec_line, text=self.tr("cfg_line_persistent"),
                         variable=var_persist).pack(anchor="w", pady=(4, 0))
         ctk.CTkLabel(sec_line, text=self.tr("cfg_line_hint"),
                      text_color="gray", wraplength=360, justify="left").pack(anchor="w")
         # Debug: host a localhost, solo sesión, default off, con código 4 dígitos
         sec_debug = _card("cfg_debug")
-        ctk.CTkLabel(sec_debug, text=self.tr("cfg_debug_port")).pack(anchor="w")
+        ctk.CTkLabel(sec_debug, text=self.tr(
+            "cfg_debug_port")).pack(anchor="w")
         e_dbg_port = ctk.CTkEntry(sec_debug, placeholder_text="8000")
         e_dbg_port.insert(0, getattr(self, "debug_port", "8000"))
         e_dbg_port.pack(fill="x", padx=12)
@@ -914,11 +985,16 @@ class App:
 
         def _refresh_dbg():
             if self.debug_localhost:
-                lbl_dbg.configure(text=self.tr("debug_state_on", url=self._debug_url()))
-                btn_dbg.configure(text=self.tr("debug_deactivate"), fg_color="orange")
+                lbl_dbg.configure(text=self.tr(
+                    "debug_state_on", url=self._debug_url()))
+                btn_dbg.configure(text=self.tr(
+                    "debug_deactivate"), fg_color=st_mod.UI_WARN)
             else:
-                lbl_dbg.configure(text=self.tr("debug_state_off", url=(self.cfg.get("api_base") or st_mod.API_BASE_DEFAULT)))
-                btn_dbg.configure(text=self.tr("debug_activate"), fg_color="gray")
+                lbl_dbg.configure(text=self.tr("debug_state_off", url=(
+                    self.cfg.get("api_base") or st_mod.API_BASE_DEFAULT)))
+                btn_dbg.configure(text=self.tr(
+                    "debug_activate"), fg_color=st_mod.UI_MUTED)
+
         def _toggle_dbg():
             if self.debug_localhost:
                 self.debug_localhost = False
@@ -937,35 +1013,42 @@ class App:
                          wraplength=280).pack()
             ctk.CTkLabel(win2, text=code,
                          font=("Courier", 26, "bold")).pack(pady=4)
-            entry = ctk.CTkEntry(win2, placeholder_text=self.tr("finish_code_ph"), justify="center")
+            entry = ctk.CTkEntry(win2, placeholder_text=self.tr(
+                "finish_code_ph"), justify="center")
             entry.pack(pady=4)
             err = ctk.CTkLabel(win2, text="", text_color="red")
             err.pack()
             entry.focus_set()
+
             def _ok(_ev=None):
                 if entry.get().strip() == code:
                     self.debug_port = e_dbg_port.get().strip()
                     win2.destroy()
                     self.debug_localhost = True
                     self._ensure_sync_client()
-                    self._status(self.tr("debug_on_log", url=self._debug_url()))
-                    self._toast(self.tr("debug_on_toast", url=self._debug_url()))
+                    self._status(
+                        self.tr("debug_on_log", url=self._debug_url()))
+                    self._toast(
+                        self.tr("debug_on_toast", url=self._debug_url()))
                     _refresh_dbg()
                 else:
                     err.configure(text=self.tr("debug_wrong"))
-            ctk.CTkButton(win2, text=self.tr("debug_modal_ok"), fg_color="orange",
+            ctk.CTkButton(win2, text=self.tr("debug_modal_ok"), fg_color=st_mod.UI_WARN,
                           command=_ok).pack(pady=2)
             entry.bind("<Return>", _ok)
-        btn_dbg = ctk.CTkButton(sec_debug, text=self.tr("debug_activate"), command=_toggle_dbg)
+        btn_dbg = ctk.CTkButton(sec_debug, text=self.tr(
+            "debug_activate"), command=_toggle_dbg)
         btn_dbg.pack(fill="x", padx=12, pady=4)
         btn_apply_port = ctk.CTkButton(scroll, text=self.tr("debug_apply"),
                                        command=lambda: (
                                            setattr(self, "debug_port",
                                                    e_dbg_port.get().strip()),
                                            self._ensure_sync_client(),
-                                           self._status(self.tr("debug_on_log", url=self._debug_url())),
+                                           self._status(
+                                               self.tr("debug_on_log", url=self._debug_url())),
                                            _refresh_dbg()))
         _orig_refresh = _refresh_dbg
+
         def _refresh_dbg():
             _orig_refresh()
             try:
@@ -984,8 +1067,10 @@ class App:
             new_size = st_mod.MODEL_SIZES[1] if ms >= st_mod.MODEL_SWITCH_THRESHOLD else st_mod.MODEL_SIZES[0]
             old_name = (self.cfg.get("device_name") or "")
             self.cfg["model_size"] = new_size
-            self.cfg["record_every_n"] = min(max(1, int(self.cfg.get("record_every_n", st_mod.RECORD_EVERY_N_DEFAULT))), st_mod.RECORD_EVERY_N_MAX)
-            self.cfg["device_name"] = e_name.get().strip()[:st_mod.DEVICE_NAME_MAX]
+            self.cfg["record_every_n"] = min(max(1, int(self.cfg.get(
+                "record_every_n", st_mod.RECORD_EVERY_N_DEFAULT))), st_mod.RECORD_EVERY_N_MAX)
+            self.cfg["device_name"] = e_name.get().strip()[
+                :st_mod.DEVICE_NAME_MAX]
             self.cfg["coords"] = e_coords.get().strip()
             self.cfg["side_a"] = e_side_a.get().strip()[:st_mod.SIDE_NAME_MAX]
             self.cfg["side_b"] = e_side_b.get().strip()[:st_mod.SIDE_NAME_MAX]
@@ -1012,6 +1097,7 @@ class App:
             # PATCH nombre en API si cambió y hay token (como la web)
             if self.cfg["device_name"] != old_name and self.cfg.get("token"):
                 new_name = self.cfg["device_name"]
+
                 def _rn():
                     try:
                         self._ensure_sync_client().rename(new_name)
@@ -1025,7 +1111,10 @@ class App:
                 self._toast(self.tr("lang_saved_toast"))
             else:
                 self._toast(self.tr("cfg_saved"))
-        ctk.CTkButton(win, text=self.tr("cfg_save"), command=_save).pack(pady=10)
+        ctk.CTkButton(win, text=self.tr("cfg_save"), command=_save,
+                          fg_color=st_mod.UI_PRIMARY, height=st_mod.UI_BTN_HERO,
+                          corner_radius=st_mod.UI_CARD_RADIUS,
+                          font=(st_mod.UI_FONT, st_mod.UI_TITLE, "bold")).pack(fill="x", padx=12, pady=12)
 
     def _reload_model(self, size: int):
         """Recarga .onnx en background sin reiniciar la app."""
@@ -1046,8 +1135,10 @@ class App:
                     return
                 want = st_mod.MODEL_FILES.get(int(size), "")
                 if want and os.path.basename(path) != want:
-                    self._status(self.tr("model_fallback", size=size, other=os.path.basename(path)))
-                    self._toast(self.tr("model_fallback", size=size, other=os.path.basename(path)))
+                    self._status(self.tr("model_fallback",
+                                 size=size, other=os.path.basename(path)))
+                    self._toast(self.tr("model_fallback", size=size,
+                                other=os.path.basename(path)))
                 sess = infer_mod.Session(path)
                 self.sess = sess
                 self._status(self.tr("model_ready", size=size))
@@ -1109,10 +1200,12 @@ def main(argv=None):
                 # estado inicial sin toast: solo el indicador
                 _ok = client._probe()
                 client._online = _ok
+
                 def _init_lbl(ok=_ok):
                     try:
                         app.lbl_net.configure(
-                            text=app.tr("net_online") if ok else app.tr("net_offline"),
+                            text=app.tr("net_online") if ok else app.tr(
+                                "net_offline"),
                             text_color="green" if ok else "red")
                     except Exception:
                         pass
