@@ -338,8 +338,8 @@ class App:
         """Notificación push in-app: popup que se autocierra (según tema)."""
         try:
             dark = ctk.get_appearance_mode() != "Light"
-            bg = "#1f2937" if dark else "#ffffff"
-            fg = "#f9fafb" if dark else "#111827"
+            bg = st_mod.UI_TOAST_BG_DARK if dark else st_mod.UI_TOAST_BG_LIGHT
+            fg = st_mod.UI_TOAST_FG_DARK if dark else st_mod.UI_TOAST_FG_LIGHT
             t = ctk.CTkToplevel(self.root, fg_color=bg)
             t.overrideredirect(True)
             t.attributes("-topmost", True)

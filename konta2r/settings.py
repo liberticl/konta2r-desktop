@@ -112,6 +112,11 @@ UI_CARD_RADIUS = 10      # esquinas de tarjetas
 UI_CARD_BORDER = 1       # borde sutil de tarjetas
 UI_BTN_H = 28            # alto estándar de botones
 UI_BTN_HERO = 40         # alto del botón principal (medición/guardar)
+# Toasts según tema (fondo / texto).
+UI_TOAST_BG_DARK = "#1f2937"
+UI_TOAST_FG_DARK = "#f9fafb"
+UI_TOAST_BG_LIGHT = "#ffffff"
+UI_TOAST_FG_LIGHT = "#111827"
 
 # ---- Sesión ----
 SESSION_PREFIX = "sesion_"

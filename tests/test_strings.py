@@ -49,8 +49,9 @@ def test_sin_texto_duro_en_ui_y_sync():
     import pathlib
     root = pathlib.Path(__file__).resolve().parent.parent / "konta2r"
     prohibidas = ["sin cámaras", "registrado", "al dia", "sincronizado",
-                  "sin conexión — envío pausado", "re-registro falló",
-                  "modo linea", "Config guardada", "Código incorrecto"]
+                    "sin conexión — envío pausado", "re-registro falló",
+                    "modo linea", "Config guardada", "Código incorrecto",
+                    "#1f2937", "#f9fafb", "#111827"]
     for rel in ("ui/app.py", "sync_client.py"):
         src = (root / rel).read_text(encoding="utf-8")
         for frase in prohibidas:
